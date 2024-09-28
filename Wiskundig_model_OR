@@ -1,0 +1,92 @@
+import numpy as np
+import scipy.stats as sp
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# project 5 OR 
+all_sheets = pd.read_excel(r"C:\Users\Fleur\Documents\Visual Studio Code\OperationsResearch\OperationsResearch\PaintShop_September_2024.xlsx", sheet_name=None)
+
+print("Beschikbare sheets in het bestand:", list(all_sheets.keys()))
+Orders = all_sheets['Orders']
+Machines = all_sheets['Machines']
+Setups = all_sheets['Setups'] 
+
+Orders = Orders.rename(columns={'Order': 'Order(O)'})
+Orders = Orders.rename(columns={'Surface': 'Surface(S_o)'})
+Orders = Orders.rename(columns={'Colour': 'Colour(Colour_o)'})
+Orders = Orders.rename(columns={'Deadline': 'Deadline(D_o)'})
+Orders = Orders.rename(columns={'Penalty': 'Penalty(C_o)'})
+Orders.head()
+
+# S_o/V_m = P_o,m
+Machines = Machines.rename(columns={'Machine': 'Machine(M)'})
+Machines = Machines.rename(columns={'Speed': 'Speed(V_m)'})
+Machines.head()
+
+M1 = Orders['Surface(S_o)']/20
+M1
+
+# Berekeningen
+M1 = Orders['Surface(S_o)'] / 20
+M2 = Orders['Surface(S_o)'] / 25
+M3 = Orders['Surface(S_o)'] / 18
+
+# Zet de resultaten in een nieuwe DataFrame
+resultaten = pd.DataFrame({
+    'M1': M1,
+    'M2': M2,
+    'M3': M3
+})
+
+# Print het resultaat
+print(resultaten)
+
+Setups = Setups.rename(columns={'Speed': 'Speed(V_m)'})
+
+import pandas as pd
+# t_O1_O2 = setup_time
+# Definieer je kolomnamen en de data
+kolomnamen = ['O1', 'O2', 't_O1_O2']
+data = [
+    ['O1', "O2", '5'], # van groen naar geel
+    ['O1', "O3", '3'], # van groen naar blauw
+    ['O2', "O1", '2'],# van geel naar groen
+    ['O2', "O3", '11'], # van geel naar blauw
+    ['O3', "O1", '4'], # van blauw naar groen
+    ['O3', "O2", '10'] # van blauw naar geel
+]
+
+# Maak een DataFrame
+df = pd.DataFrame(data, columns=kolomnamen)
+df.head()
+
+# P_o,m = processing time van de order o op mashine m
+# S_o/V_m = P_o,m
+# Definieer je kolomnamen en de data
+kolomnamen = ['O', 'M', 'P_o,m']
+data = [
+    ['O1', "O2", '5'], # van groen naar geel
+    ['O1', "O3", '3'], # van groen naar blauw
+    ['O2', "O1", '2'],# van geel naar groen
+    ['O2', "O3", '11'], # van geel naar blauw
+    ['O3', "O1", '4'], # van blauw naar groen
+    ['O3', "O2", '10'] # van blauw naar geel
+]
+
+# Maak een DataFrame
+df = pd.DataFrame(data, columns=kolomnamen)
+df.head()
+
+# 30 kleuren 
+# Vervang 'kleur_kolom' door de naam van de kolom die de kleuren bevat
+aantal_unieke_kleuren = Orders['Colour'].nunique()
+
+print(f"Aantal unieke kleuren: {aantal_unieke_kleuren}")
+
+aantal_unieke_orders = Orders['Colour'].nunique()
+
+print(f"Aantal unieke kleuren: {aantal_unieke_kleuren}")
+
+# randvoorwaarde
+# 1 order 1 mashine
+# min schedual costs (sum(co*lo)) --> (sum(pentalty cost for order o in O * latness order))
