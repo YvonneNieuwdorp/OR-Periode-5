@@ -1,0 +1,103 @@
+import numpy as np
+import pandas as pd
+
+# Load all sheets
+all_sheets = pd.read_excel("PaintShop - September 2024.xlsx", sheet_name=None)
+Orders = all_sheets['Orders']
+Machines = all_sheets['Machines']
+Setups = all_sheets['Setups']
+
+# Rename columns
+Orders = Orders.rename(columns={
+    'Order': 'Order(O)',
+    'Surface': 'Surface(s_o)',
+    'Colour': 'Colour(Colour_o)',
+    'Deadline': 'Deadline(d_o)',
+    'Penalty': 'Penalty(c_o)'
+})
+
+Setups = Setups.rename(columns={
+    'Setup time': 'Setup_time(t_h1_h2)',
+    'From colour': 'From colour(h1)',
+    'To colour': 'To colour(h2)'
+})
+
+# Processing times based on surface area
+M1 = Orders['Surface(s_o)'] / 20
+M2 = Orders['Surface(s_o)'] / 25
+M3 = Orders['Surface(s_o)'] / 18
+
+P_o_m = pd.DataFrame({'M1': M1, 'M2': M2, 'M3': M3})
+
+# Create a dictionary for setup times
+setups_dict = pd.Series(Setups['Setup_time(t_h1_h2)'].values, index=zip(Setups['From colour(h1)'], Setups['To colour(h2)'])).to_dict()
+
+# Initialize start times
+start_times = {}
+
+# Get predecessor function
+def get_predecessor(order_name, orders):
+    order = orders.loc[orders['Order(O)'] == order_name]
+    if order.empty:
+        return None
+    machine = order['Machine(M)'].values[0]
+    seqno = order['seqno'].values[0] 
+    
+    if seqno == 1:
+        return None
+    else:
+        pred_order = orders[(orders['Machine(M)'] == machine) & (orders['seqno'] == seqno - 1)]
+        return pred_order['Order(O)'].values[0] if not pred_order.empty else None
+
+# Get start time function
+def get_start_time(order_name, orders, end_times, setup_times):
+    if order_name not in orders['Order(O)'].values:
+        print(f"Waarschuwing: Order(O) '{order_name}' bestaat niet in de orders.")
+        return None
+
+    order = orders.loc[orders['Order(O)'] == order_name].iloc[0]
+    seqno = order['seqno']
+
+    if seqno == 1:
+        return 0
+    else:
+        pred_o = get_predecessor(order_name, orders)
+        if pred_o is not None:
+            e_pred_o = end_times.get(pred_o, 0) 
+            pred_colour = orders.loc[orders['Order(O)'] == pred_o, 'Colour(Colour_o)'].values[0]
+            current_colour = order['Colour(Colour_o)']
+            t_h1_h2 = setup_times.get((pred_colour, current_colour), 0)
+            return e_pred_o + t_h1_h2
+        else:
+            return None
+
+# Calculate end time function
+def calculate_end_time(order_name, start_times, processing_times):
+    b_o = start_times[order_name]
+    P_o_m_value = processing_times.loc[orders['Order(O)'] == order_name].values[0]
+    return b_o + P_o_m_value
+
+# Calculate lateness function
+def calculate_lateness(order_name, end_time, deadline):
+    return max(0, end_time - deadline)
+
+# Calculate total schedule cost function
+def calculate_schedule_cost(orders, start_times, processing_times, setup_times):
+    total_cost = 0
+    for order_name in orders['Order(O)']:
+        e_o = calculate_end_time(order_name, start_times, processing_times)
+        d_o = orders.loc[orders['Order(O)'] == order_name, 'Deadline(d_o)'].values[0]
+        l_o = calculate_lateness(order_name, e_o, d_o)
+        C_o = orders.loc[orders['Order(O)'] == order_name, 'Penalty(c_o)'].values[0]
+        total_cost += C_o * l_o
+        
+        print(f"Order: {order_name}, Starttijd: {start_times[order_name]}, Eindtijd: {e_o}, Vertraging: {l_o}, Kosten: {C_o * l_o}")
+    
+    return total_cost
+
+# Calculate total schedule cost
+for order_name in Orders['Order(O)']:
+    start_times[order_name] = get_start_time(order_name, Orders, start_times, setups_dict)
+
+total_cost = calculate_schedule_cost(Orders, start_times, P_o_m, setups_dict)
+print(f"Totaal schema kosten: {total_cost}")

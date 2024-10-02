@@ -2,6 +2,7 @@ import numpy as np
 import scipy.stats as sp
 import matplotlib.pyplot as plt
 import pandas as pd
+from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpStatus, value
 
 # project 5 OR 
 #all_sheets = pd.read_excel(r"C:\Users\Fleur\Documents\Visual Studio Code\OperationsResearch\OperationsResearch\PaintShop_September_2024.xlsx", sheet_name=None)
@@ -42,7 +43,7 @@ P_o_m = pd.DataFrame({
 
 # decision variables 
 # machine_o = machine on wich order o is execuled.
-# seqno_o = sequence number of order o on maschine_o
+# seqno  = sequence number of order o on maschine_o
 # sequence_m = order in which orders o that are assigned to m are executed
 
 # parameters:
@@ -57,6 +58,22 @@ setups_dict = pd.Series(Setups['Setup_time(t_h1_h2)'].values, index=zip(Setups['
 
 # Initialize start_times dictionary
 start_times = {}
+
+# Maak een optimalisatiemodel
+model = LpProblem("Minimaliseer_Totale_Kosten", LpMinimize)
+
+# Besluitvariabelen: seqno voor elke order
+seqno = LpVariable.dicts("seqno", Orders['Order(O)'], lowBound=1, upBound=len(Orders), cat='Integer')
+
+# Functie om de eindtijd te berekenen met de gegeven volgorde
+def calculate_end_time_with_sequence(seqno):
+    end_times = {}
+    for order_name in sorted(Orders['Order(O)'], key=lambda x: seqno[x].varValue):
+        start_time = get_start_time(order_name, Orders, end_times, setups_dict)
+        processing_time = P_o_m.loc[Orders['Order(O)'] == order_name].values[0]
+        end_time = start_time + processing_time
+        end_times[order_name] = end_time
+    return end_times
 
 # Functie om de voorganger van een order te bepalen (zoals eerder)
 def get_predecessor(order_name, orders):
@@ -135,6 +152,38 @@ def calculate_schedule_cost(orders, start_times, processing_times, setup_times):
 # Totale kosten van het schema berekenen
 total_cost = calculate_schedule_cost(Orders, start_times, P_o_m, setups_dict)  # Ensure `setups_dict` is defined correctly
 print(f"Totaal schema kosten: {total_cost}")
+
+# Doelfunctie: minimaliseer de totale kosten
+def total_cost_function():
+    end_times = calculate_end_time_with_sequence(seqno)
+    total_cost = 0
+    for order_name in Orders['Order(O)']:
+        d_o = Orders.loc[Orders['Order(O)'] == order_name, 'Deadline(d_o)'].values[0]
+        l_o = calculate_lateness(order_name, end_times[order_name], d_o)
+        penalty = Orders.loc[Orders['Order(O)'] == order_name, 'Penalty(c_o)'].values[0]
+        total_cost += penalty * l_o
+    return total_cost
+
+# Voeg de kostenfunctie toe aan het model
+model += lpSum(total_cost_function()), "Totale_Kosten"
+
+# Voeg beperkingen toe, zoals dat de seqno uniek moet zijn
+model += lpSum([seqno[order] for order in Orders['Order(O)']]) == len(Orders), "Unieke_Seqno"
+
+# Los het model op
+model.solve()
+
+# Print de resultaten
+print(f"Status: {LpStatus[model.status]}")
+for order in Orders['Order(O)']:
+    print(f"Order: {order}, Seqno: {seqno[order].varValue}")
+
+# Totale kosten
+optimal_total_cost = value(model.objective)
+print(f"Optimale totale kosten: {optimal_total_cost}")
+
+# Voorbeeld debug print in calculate_schedule_cost
+print(f"Order: {order_name}, Starttijd: {start_times.get(order_name)}, Eindtijd: {e_o}, Vertraging: {l_o}, Kosten: {C_o * l_o}")
 
 # pred_o = predecessor of order o on machine_o
 #pred_o = ---                           if sequno_o = 1
