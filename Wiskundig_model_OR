@@ -7,11 +7,13 @@ import pandas as pd
 #all_sheets = pd.read_excel(r"C:\Users\Fleur\Documents\Visual Studio Code\OperationsResearch\OperationsResearch\PaintShop_September_2024.xlsx", sheet_name=None)
 
 # project 5 OR f
-all_sheets = pd.read_excel("PaintShop-September2024.xlsx", sheet_name=None)
+all_sheets = pd.read_excel("PaintShop - September 2024.xlsx", sheet_name=None)
 print("Beschikbare sheets in het bestand:", list(all_sheets.keys()))
 Orders = all_sheets['Orders']
 Machines = all_sheets['Machines']
 Setups = all_sheets['Setups'] 
+
+print(Orders.head())
 
 Orders = Orders.rename(columns={'Order': 'Order(O)'})
 Orders = Orders.rename(columns={'Surface': 'Surface(s_o)'})
@@ -50,6 +52,12 @@ P_o_m = pd.DataFrame({
 # d_o = deadline for order o
 # derived variables:
 
+# Create a dictionary for setup times
+setups_dict = pd.Series(Setups['Setup_time(t_h1_h2)'].values, index=zip(Setups['From colour(h1)'], Setups['To colour(h2)'])).to_dict()
+
+# Initialize start_times dictionary
+start_times = {}
+
 # Functie om de voorganger van een order te bepalen (zoals eerder)
 def get_predecessor(order_name, orders):
     order = orders[order_name]
@@ -66,29 +74,34 @@ def get_predecessor(order_name, orders):
 
 # Functie om de starttijd van een order te bepalen (b_o)
 def get_start_time(order_name, orders, end_times, setup_times):
-    order = orders[order_name]
+    # Controleer of de ordernaam bestaat
+    if order_name not in orders['Order(O)'].values:
+        print(f"Waarschuwing: Order(O) '{order_name}' bestaat niet in de orders.")
+        return None
+
+    order = orders.loc[orders['Order(O)'] == order_name].iloc[0]
     seqno = order['seqno']
-    
+
     if seqno == 1:
-        # Starttijd is 0 als het de eerste order is
         return 0
     else:
-        # Zoek de voorganger van de order
         pred_o = get_predecessor(order_name, orders)
         if pred_o is not None:
-            # Haal de eindtijd van de voorganger op
-            e_pred_o = end_times[pred_o]
-            
-            # Haal de setup-tijd op tussen de kleur van de voorganger en de huidige order
-            pred_colour = orders[pred_o]['colour']
-            current_colour = order['colour']
-            t_h1_h2 = setup_times.get((pred_colour, current_colour), 0)  # Default setup-tijd is 0 als het niet in de lijst staat
-            
-            # Starttijd is eindtijd van de voorganger plus de setup-tijd
-            return e_pred_o + t_h1_h2
+            e_pred_o = end_times.get(pred_o, 0)  # Gebruik .get om een fout te vermijden als de voorganger niet bestaat
+
+            # Gebruik de juiste kolomnamen
+            pred_colour = orders.loc[orders['Order(O)'] == pred_o, 'Colour'].values[0]
+            current_colour = order['Colour']
+            t_h1_h2 = setup_times.get((pred_colour, current_colour), 0)
+            start_times = e_pred_o + t_h1_h2
+            return start_times
         else:
             return None  # Dit zou niet moeten gebeuren als alles correct is
 
+# Assuming the Orders DataFrame is indexed by order names (Order(O))
+for order_name in Orders['Order(O)']:
+    start_times[order_name] = get_start_time(order_name, Orders, start_times, setups_dict)
+    
 # Functie om de eindtijd van een order te berekenen
 def calculate_end_time(order_name, start_times, processing_times):
     b_o = start_times[order_name]
@@ -100,26 +113,27 @@ def calculate_lateness(order_name, end_time, deadline):
     return max(0, end_time - deadline)
 
 # Functie om de totale schema-kosten te berekenen
-def calculate_schedule_cost(orders, start_times, processing_times):
+def calculate_schedule_cost(orders, start_times, processing_times, setup_times):
     total_cost = 0
     for order_name, order_info in orders.items():
         # Bereken de eindtijd van de order
         e_o = calculate_end_time(order_name, start_times, processing_times)
         
         # Bereken de vertraging van de order
-        d_o = order_info['deadline']
+        d_o = order_info['Deadline(d_o)']  # Use the renamed column
         l_o = calculate_lateness(order_name, e_o, d_o)
         
         # Bereken de kosten voor deze order
-        C_o = order_info['penalty_cost']
+        C_o = order_info['Penalty(c_o)']  # Use the renamed column
         total_cost += C_o * l_o
         
+        # Optional: Print order details for debugging
         print(f"Order: {order_name}, Starttijd: {start_times[order_name]}, Eindtijd: {e_o}, Vertraging: {l_o}, Kosten: {C_o * l_o}")
     
     return total_cost
 
 # Totale kosten van het schema berekenen
-total_cost = calculate_schedule_cost(orders, start_times, processing_times)
+total_cost = calculate_schedule_cost(Orders, start_times, P_o_m, setups_dict)  # Ensure `setups_dict` is defined correctly
 print(f"Totaal schema kosten: {total_cost}")
 
 # pred_o = predecessor of order o on machine_o
