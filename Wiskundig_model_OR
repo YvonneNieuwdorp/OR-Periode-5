@@ -4,89 +4,138 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # project 5 OR 
-all_sheets = pd.read_excel(r"C:\Users\Fleur\Documents\Visual Studio Code\OperationsResearch\OperationsResearch\PaintShop_September_2024.xlsx", sheet_name=None)
+#all_sheets = pd.read_excel(r"C:\Users\Fleur\Documents\Visual Studio Code\OperationsResearch\OperationsResearch\PaintShop_September_2024.xlsx", sheet_name=None)
 
+# project 5 OR f
+all_sheets = pd.read_excel("PaintShop-September2024.xlsx", sheet_name=None)
 print("Beschikbare sheets in het bestand:", list(all_sheets.keys()))
 Orders = all_sheets['Orders']
 Machines = all_sheets['Machines']
 Setups = all_sheets['Setups'] 
 
 Orders = Orders.rename(columns={'Order': 'Order(O)'})
-Orders = Orders.rename(columns={'Surface': 'Surface(S_o)'})
+Orders = Orders.rename(columns={'Surface': 'Surface(s_o)'})
 Orders = Orders.rename(columns={'Colour': 'Colour(Colour_o)'})
-Orders = Orders.rename(columns={'Deadline': 'Deadline(D_o)'})
-Orders = Orders.rename(columns={'Penalty': 'Penalty(C_o)'})
-Orders.head()
+Orders = Orders.rename(columns={'Deadline': 'Deadline(d_o)'})
+Orders = Orders.rename(columns={'Penalty': 'Penalty(c_o)'})
 
-# S_o/V_m = P_o,m
+Setups = Setups.rename(columns={'Setup time': 'Setup_time(t_h1_h2)'})
+Setups = Setups.rename(columns={'From colour': 'From colour(h1)'})
+Setups = Setups.rename(columns={'To colour': 'To colour(h2)'})
+
 Machines = Machines.rename(columns={'Machine': 'Machine(M)'})
 Machines = Machines.rename(columns={'Speed': 'Speed(V_m)'})
-Machines.head()
-
-M1 = Orders['Surface(S_o)']/20
-M1
 
 # Berekeningen
-M1 = Orders['Surface(S_o)'] / 20
-M2 = Orders['Surface(S_o)'] / 25
-M3 = Orders['Surface(S_o)'] / 18
+M1 = Orders['Surface(s_o)'] / 20
+M2 = Orders['Surface(s_o)'] / 25
+M3 = Orders['Surface(s_o)'] / 18
 
 # Zet de resultaten in een nieuwe DataFrame
-resultaten = pd.DataFrame({
+P_o_m = pd.DataFrame({
     'M1': M1,
     'M2': M2,
     'M3': M3
 })
 
-# Print het resultaat
-print(resultaten)
+# decision variables 
+# machine_o = machine on wich order o is execuled.
+# seqno_o = sequence number of order o on maschine_o
+# sequence_m = order in which orders o that are assigned to m are executed
 
-Setups = Setups.rename(columns={'Speed': 'Speed(V_m)'})
+# parameters:
+# P_o_m = processing time van de order o op mashine m
+# t_h1_h2 = set up time from h1 to h2
+# e_pred_o = de tijd waarop het vorrige proces stopte (deze weet je mas als het model aan de gang is)
+# d_o = deadline for order o
+# derived variables:
 
-import pandas as pd
-# t_O1_O2 = setup_time
-# Definieer je kolomnamen en de data
-kolomnamen = ['O1', 'O2', 't_O1_O2']
-data = [
-    ['O1', "O2", '5'], # van groen naar geel
-    ['O1', "O3", '3'], # van groen naar blauw
-    ['O2', "O1", '2'],# van geel naar groen
-    ['O2', "O3", '11'], # van geel naar blauw
-    ['O3', "O1", '4'], # van blauw naar groen
-    ['O3', "O2", '10'] # van blauw naar geel
-]
+# Functie om de voorganger van een order te bepalen (zoals eerder)
+def get_predecessor(order_name, orders):
+    order = orders[order_name]
+    machine = order['machine']
+    seqno = order['seqno']
+    
+    if seqno == 1:
+        return None
+    else:
+        for o, info in orders.items():
+            if info['machine'] == machine and info['seqno'] == seqno - 1:
+                return o
+        return None
 
-# Maak een DataFrame
-df = pd.DataFrame(data, columns=kolomnamen)
-df.head()
+# Functie om de starttijd van een order te bepalen (b_o)
+def get_start_time(order_name, orders, end_times, setup_times):
+    order = orders[order_name]
+    seqno = order['seqno']
+    
+    if seqno == 1:
+        # Starttijd is 0 als het de eerste order is
+        return 0
+    else:
+        # Zoek de voorganger van de order
+        pred_o = get_predecessor(order_name, orders)
+        if pred_o is not None:
+            # Haal de eindtijd van de voorganger op
+            e_pred_o = end_times[pred_o]
+            
+            # Haal de setup-tijd op tussen de kleur van de voorganger en de huidige order
+            pred_colour = orders[pred_o]['colour']
+            current_colour = order['colour']
+            t_h1_h2 = setup_times.get((pred_colour, current_colour), 0)  # Default setup-tijd is 0 als het niet in de lijst staat
+            
+            # Starttijd is eindtijd van de voorganger plus de setup-tijd
+            return e_pred_o + t_h1_h2
+        else:
+            return None  # Dit zou niet moeten gebeuren als alles correct is
 
-# P_o,m = processing time van de order o op mashine m
-# S_o/V_m = P_o,m
-# Definieer je kolomnamen en de data
-kolomnamen = ['O', 'M', 'P_o,m']
-data = [
-    ['O1', "O2", '5'], # van groen naar geel
-    ['O1', "O3", '3'], # van groen naar blauw
-    ['O2', "O1", '2'],# van geel naar groen
-    ['O2', "O3", '11'], # van geel naar blauw
-    ['O3', "O1", '4'], # van blauw naar groen
-    ['O3', "O2", '10'] # van blauw naar geel
-]
+# Functie om de eindtijd van een order te berekenen
+def calculate_end_time(order_name, start_times, processing_times):
+    b_o = start_times[order_name]
+    P_o_m = processing_times[order_name]
+    return b_o + P_o_m
 
-# Maak een DataFrame
-df = pd.DataFrame(data, columns=kolomnamen)
-df.head()
+# Functie om de vertraging (lateness) van een order te berekenen
+def calculate_lateness(order_name, end_time, deadline):
+    return max(0, end_time - deadline)
 
-# 30 kleuren 
-# Vervang 'kleur_kolom' door de naam van de kolom die de kleuren bevat
-aantal_unieke_kleuren = Orders['Colour'].nunique()
+# Functie om de totale schema-kosten te berekenen
+def calculate_schedule_cost(orders, start_times, processing_times):
+    total_cost = 0
+    for order_name, order_info in orders.items():
+        # Bereken de eindtijd van de order
+        e_o = calculate_end_time(order_name, start_times, processing_times)
+        
+        # Bereken de vertraging van de order
+        d_o = order_info['deadline']
+        l_o = calculate_lateness(order_name, e_o, d_o)
+        
+        # Bereken de kosten voor deze order
+        C_o = order_info['penalty_cost']
+        total_cost += C_o * l_o
+        
+        print(f"Order: {order_name}, Starttijd: {start_times[order_name]}, Eindtijd: {e_o}, Vertraging: {l_o}, Kosten: {C_o * l_o}")
+    
+    return total_cost
 
-print(f"Aantal unieke kleuren: {aantal_unieke_kleuren}")
+# Totale kosten van het schema berekenen
+total_cost = calculate_schedule_cost(orders, start_times, processing_times)
+print(f"Totaal schema kosten: {total_cost}")
 
-aantal_unieke_orders = Orders['Colour'].nunique()
+# pred_o = predecessor of order o on machine_o
+#pred_o = ---                           if sequno_o = 1
+#pred_o = sequence(machine_o,seqno_o-1) if sequno_o > 1
 
-print(f"Aantal unieke kleuren: {aantal_unieke_kleuren}")
+# b_o = start time order o
+# b_o = 0                                if sequno_o = 1
+# b_o = e_pred_o + t_h1_h2               if sequno_o > 1
 
-# randvoorwaarde
-# 1 order 1 mashine
-# min schedual costs (sum(co*lo)) --> (sum(pentalty cost for order o in O * latness order))
+# e_o = end time order o
+# e_o = b_o + P_o_m
+
+# l_o = lateness order o
+# l_o = max{o, e_o-d_o}
+# d_o = deadline for oder o
+
+# schedual cost
+# min sum(C_o*l_o, o) (sum(pentalty cost for order o in O * latness order)
