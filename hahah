@@ -1,95 +1,148 @@
-import numpy as np
 import pandas as pd
-from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpStatus, value
+import numpy as np
+import scipy.stats as sp
+import matplotlib.pyplot as plt
 
-# Load all sheets
-all_sheets = pd.read_excel("PaintShop - September 2024.xlsx", sheet_name=None)
-Orders = all_sheets['Orders']
-Machines = all_sheets['Machines']
-Setups = all_sheets['Setups']
+Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
+Machines = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Machines')
+Setups = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Setups')
 
-# Rename columns
-Orders = Orders.rename(columns={
-    'Order': 'Order(O)',
-    'Surface': 'Surface(s_o)',
-    'Colour': 'Colour(Colour_o)',
-    'Deadline': 'Deadline(d_o)',
-    'Penalty': 'Penalty(c_o)'
-})
+current_time_m1 = 0
+current_time_m2 = 0
+current_time_m3 = 0
+scheduled_orders = []
+available_orders = Orders.copy()
+current_colour_m1 = None
+current_colour_m2 = None
+current_colour_m3 = None
 
-Setups = Setups.rename(columns={
-    'Setup time': 'Setup_time(t_h1_h2)',
-    'From colour': 'From colour(h1)',
-    'To colour': 'To colour(h2)'
-})
+def processing_time(ordernumber, number_of_machine):
+    """ Functie die de processing time berekent
+    Parameters: 
+        - ordernummer, als een int
+        - machine die gebruikt wordt, als een int
+    Output: de tijd die nodig is om de order uit te voeren/processingtime
+    """
+    return Orders.loc[ordernumber, 'Surface']/ Machines.loc[number_of_machine, 'Speed']
 
-# Processing times based on surface area
-M1 = Orders['Surface(s_o)'] / 20
-M2 = Orders['Surface(s_o)'] / 25
-M3 = Orders['Surface(s_o)'] / 18
+def setup_time(prev_colour, new_colour):
+    """ geeft de setuptime aan
+    Parameters
+        - previous color als een string
+        - new color als een string
+    Output: setup_time
+    """
+    result = Setups.loc[(Setups['From colour'] == prev_colour) & (Setups['To colour'] == new_colour), 'Setup time']
+    if not result.empty:
+        return result.values[0]
+    else:
+        return 0 
 
-P_o_m = pd.DataFrame({'M1': M1, 'M2': M2, 'M3': M3})
-P_o_m.index = Orders['Order(O)']
+def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2,current_colour_m3):
+    """ Berekent de oplossing die het dichtbij het meest optimaal is, gebaseerd op minimale kosten
+    Parameters
+        - current_time: huidige tijd
+        - available_order: orders die nog beschikbaar zijn, niet uitgevoerd
+        - current_colour: huidige kleur
+    Output: order die in huidige reeks het meest optimaal is
+    """
+    best_order = None
+    best_machine = None
+    min_cost = float('inf')
 
-# Create setup time dictionary
-setups_dict = pd.Series(Setups['Setup_time(t_h1_h2)'].values, 
-                        index=zip(Setups['From colour(h1)'], Setups['To colour(h2)'])).to_dict()
+    for index, order in available_orders.iterrows(): 
+        time_to_finish_m1 = current_time_m1 + processing_time(index, 0)
+        lateness_m1 = max(0, time_to_finish_m1 - order['Deadline'])
+        cost_m1 = lateness_m1 * order['Penalty']
+        cost_m1 += setup_time(current_colour_m1, order["Colour"]) if current_colour_m1 else 0
 
-# Create optimization model
-model = LpProblem("Minimaliseer_Totale_Kosten", LpMinimize)
+        time_to_finish_m2 = current_time_m2 + processing_time(index, 1)
+        lateness_m2 = max(0, time_to_finish_m2 - order['Deadline'])
+        cost_m2 = lateness_m2 * order['Penalty']
+        cost_m2 += setup_time(current_colour_m2, order["Colour"]) if current_colour_m2 else 0
 
-# Decision variables: machine_o (which machine processes the order) and seqno (sequence of the orders on the machines)
-machine_o = LpVariable.dicts("machine_o", Orders['Order(O)'], lowBound=1, upBound=len(Machines), cat='Integer')
-seqno = LpVariable.dicts("seqno", Orders['Order(O)'], lowBound=1, upBound=len(Orders), cat='Integer')
-order_name = Orders['Order(O)']
-# Function to calculate the end time of an order
-def calculate_end_time(order_name, start_times, processing_times):
-    b_o = start_times[order_name]
-    P_o = processing_times.loc[order_name]
-    return b_o + P_o
-
-# Function to calculate lateness
-def calculate_lateness(order_name, end_time, deadline):
-    return max(0, end_time - deadline)
-
-# Function to calculate total schedule cost
-def calculate_schedule_cost(orders, start_times, processing_times):
-    total_cost = 0
-    for order_name in orders['Order(O)']:
-        # Calculate end time for the order
-        e_o = calculate_end_time(order_name, start_times, processing_times)
+        time_to_finish_m3 = current_time_m3 + processing_time(index, 2)
+        lateness_m3 = max(0, time_to_finish_m3 - order['Deadline'])
+        cost_m3 = lateness_m3 * order['Penalty']
+        cost_m3 += setup_time(current_colour_m3, order["Colour"]) if current_colour_m3 else 0
         
-        # Calculate lateness for the order
-        d_o = orders.loc[orders['Order(O)'] == order_name, 'Deadline(d_o)'].values[0]
-        l_o = calculate_lateness(order_name, e_o, d_o)
+        if cost_m1 < min_cost:
+            min_cost = cost_m1
+            best_order = index
+            best_machine = "M1"
+        if cost_m2 < min_cost:
+            min_cost = cost_m2
+            best_order = index
+            best_machine = "M2"
+        if cost_m3 < min_cost:
+            min_cost = cost_m3
+            best_order = index
+            best_machine = "M3"
+    return best_order, best_machine
+
+# Lijst om iteratieresultaten op te slaan
+results = []
+
+# Scheduling loop for both machines
+while not available_orders.empty:
+    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
+    
+    if next_order_idx is not None:
+        next_order = available_orders.loc[next_order_idx]
+        scheduled_orders.append((next_order, best_machine))
         
-        # Calculate cost for this order
-        C_o = orders.loc[orders['Order(O)'] == order_name, 'Penalty(c_o)'].values[0]
-        total_cost += C_o * l_o
+        if best_machine == "M1":
+            # Update machine 1's time and color
+            current_time_m1 += processing_time(next_order_idx, 0)
+            current_time_m1 += setup_time(current_colour_m1, next_order["Colour"])
+            current_colour_m1 = next_order["Colour"]
+            start_time = current_time_m1
+            proc_time = processing_time(next_order_idx, 0)
+            setup_t = setup_time(current_colour_m1, next_order["Colour"]) if current_colour_m1 else 0
+            end_time = start_time + setup_t + proc_time
+            lateness = max(0, end_time - next_order['Deadline'])
+
+        elif best_machine == "M2":
+            # Update machine 2's time and color
+            current_time_m2 += processing_time(next_order_idx, 1)
+            current_time_m2 += setup_time(current_colour_m2, next_order["Colour"])
+            current_colour_m2 = next_order["Colour"]
+            start_time = current_time_m2
+            proc_time = processing_time(next_order_idx, 1)
+            setup_t = setup_time(current_colour_m2, next_order["Colour"]) if current_colour_m2 else 0
+            end_time = start_time + setup_t + proc_time
+            lateness = max(0, end_time - next_order['Deadline'])
+            
         
-    return total_cost
+            
+        else:
+            # Update machine 3's time and color
+            current_time_m3 += processing_time(next_order_idx, 2)
+            current_time_m3 += setup_time(current_colour_m3, next_order["Colour"])
+            current_colour_m3 = next_order["Colour"]
+            start_time = current_time_m3
+            proc_time = processing_time(next_order_idx, 2)
+            setup_t = setup_time(current_colour_m3, next_order["Colour"]) if current_colour_m3 else 0
+            end_time = start_time + setup_t + proc_time
+            lateness = max(0, end_time - next_order['Deadline'])
 
-# Objective function: minimize total cost
-def total_cost_function():
-    start_times = {order: 0 for order in Orders['Order(O)']}  # For now, all start times are 0
-    total_cost = calculate_schedule_cost(Orders, start_times, P_o_m)
-    return total_cost
+        
+        # Voeg de huidige status van de planning toe aan de resultaten
+        results.append({
+            "Order": next_order['Order'],
+            "Machine": best_machine,
+            "Start Time": start_time,
+            "End Time": end_time,
+            "Colour": next_order['Colour'],
+            "Setup Time": setup_t,
+            "Processing Time": proc_time,
+            "Lateness": lateness,
+            "Penalty Cost": lateness * next_order['Penalty']
+        })
+        
+        # Remove the scheduled order from available orders
+        available_orders.drop(next_order_idx, inplace=True)
 
-# Add objective function to model
-model += total_cost_function(), "Totale_Kosten"
-
-# Ensure unique sequence number constraint
-for i in range(1, len(Orders) + 1):
-    model += lpSum([seqno[order] == i for order in Orders['Order(O)']]) == 1, f"Unique_Seqno_{i}"
-
-# Solve the model
-model.solve()
-
-# Results
-print(f"Status: {LpStatus[model.status]}")
-for order in Orders['Order(O)']:
-    print(f"Order: {order}, Seqno: {seqno[order].varValue}, Machine: {machine_o[order].varValue}")
-
-# Total cost
-optimal_total_cost = value(model.objective)
-print(f"Optimale totale kosten: {optimal_total_cost}")
+# Zet resultaten om in een DataFrame voor verdere verwerking
+results_df = pd.DataFrame(results)
+print(results_df)
