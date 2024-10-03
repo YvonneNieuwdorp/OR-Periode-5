@@ -108,9 +108,8 @@ while not available_orders.empty:
         # Remove the scheduled order from available orders
         available_orders.drop(next_order_idx, inplace=True)
 
-# Output the scheduled orders
-for order, machine in scheduled_orders:
-    print(f"Order {order['Order']} scheduled on {machine} with colour {order['Colour']}")
+# dataframe
+
 
 # Tabu Search
 # wat moet ik doen:
@@ -123,6 +122,7 @@ for order, machine in scheduled_orders:
 # mijn algoritme stopt pas als al mijn iteraties gedaan zijn. 
 # Dus daar moet ik een hoog nummer voor kiezen = 424242424224
 # Het algoritme bepaald de beste optie die niet tabu is. (met een slechtere doelfuntie)
+
 
 
 

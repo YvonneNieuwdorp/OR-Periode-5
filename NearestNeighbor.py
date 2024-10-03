@@ -80,6 +80,9 @@ def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available
             best_machine = "M3"
     return best_order, best_machine
 
+# Lijst om iteratieresultaten op te slaan
+results = []
+
 # Scheduling loop for both machines
 while not available_orders.empty:
     next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
@@ -105,13 +108,25 @@ while not available_orders.empty:
             current_time_m3 += setup_time(current_colour_m3, next_order["Colour"])
             current_colour_m3 = next_order["Colour"]
         
+
+        # Voeg de huidige status van de planning toe aan de resultaten
+        results.append({
+            "Order": next_order['Order'],
+            "Machine": best_machine,
+            "Start Time": current_time_m1 if best_machine == "M1" else current_time_m2 if best_machine == "M2" else current_time_m3,
+            "Colour": next_order['Colour'],
+            "Setup Time": setup_time(current_colour_m1, next_order["Colour"]),
+            "Processing Time": processing_time(next_order_idx, 0 if best_machine == "M1" else 1 if best_machine == "M2" else 2)
+        })
+        
         # Remove the scheduled order from available orders
         available_orders.drop(next_order_idx, inplace=True)
 
-# Output the scheduled orders
-for order, machine in scheduled_orders:
-    print(f"Order {order['Order']} scheduled on {machine} with colour {order['Colour']}")
 
+
+# Zet resultaten om in een DataFrame voor verdere verwerking
+results_df = pd.DataFrame(results)
+print(results_df)
 
 
 ## Discret Improving Search
@@ -121,14 +136,14 @@ logging.basicConfig(level=logging.INFO,
                     format='[%(asctime)s] %(message)s',
                     handlers=[logging.FileHandler("2opt.log")])
 
-def best_improvement(order, machine, scheduled_orders):
-    """ verbetert het gegeven schema
-    Parameters: 
-        dat weten we zelf ook nog niet
-    Output: aangepast schema waarbij er minder pentaltycosts zijn
-    """
-    logger.debug(msg="Apply Discrete Improving Search with 2-exchange neighborhood and best improvement on TSP (2-opt)")
-    while True: 
-        max_gain = 30
-        fi_move_found = False
-        for i in range(1, ):
+#def best_improvement(order, machine, scheduled_orders):
+    #""" verbetert het gegeven schema
+    #Parameters: 
+    #    dat weten we zelf ook nog niet
+    #Output: aangepast schema waarbij er minder pentaltycosts zijn
+    #"""
+    #logger.debug(msg="Apply Discrete Improving Search with 2-exchange neighborhood and best improvement on TSP (2-opt)")
+    #while True: 
+        #max_gain = 30
+        #fi_move_found = False
+        #for i in range(1, ):

@@ -14,8 +14,6 @@ Orders = all_sheets['Orders']
 Machines = all_sheets['Machines']
 Setups = all_sheets['Setups'] 
 
-print(Orders.head())
-
 Orders = Orders.rename(columns={'Order': 'Order(O)'})
 Orders = Orders.rename(columns={'Surface': 'Surface(s_o)'})
 Orders = Orders.rename(columns={'Colour': 'Colour(Colour_o)'})
@@ -44,7 +42,7 @@ P_o_m = pd.DataFrame({
 # decision variables 
 # machine_o = machine on wich order o is execuled.
 # seqno  = sequence number of order o on maschine_o
-# sequence_m = order in which orders o that are assigned to m are executed
+# sequence_m = order in which orders o that are assigned to machine_o are executed
 
 # parameters:
 # P_o_m = processing time van de order o op mashine m
@@ -62,8 +60,12 @@ start_times = {}
 # Maak een optimalisatiemodel
 model = LpProblem("Minimaliseer_Totale_Kosten", LpMinimize)
 
-# Besluitvariabelen: seqno voor elke order
-seqno = LpVariable.dicts("seqno", Orders['Order(O)'], lowBound=1, upBound=len(Orders), cat='Integer')
+# Besluitvariabelen:
+machine_o = LpVariable.dicts("machine_o", Orders['Order(O)'], lowBound=1, upBound=len(Machines), cat='Integer')
+pred_o = LpVariable.dicts("pred_o", Orders['Order(O)'], cat='Binary')
+order_sequence_m = LpVariable.dicts("order_sequence_m", Machines["Machine(M)"], lowBound=1, upBound=len(Orders), cat='Integer')
+
+# 
 
 # Functie om de eindtijd te berekenen met de gegeven volgorde
 def calculate_end_time_with_sequence(seqno):
@@ -75,19 +77,15 @@ def calculate_end_time_with_sequence(seqno):
         end_times[order_name] = end_time
     return end_times
 
-# Functie om de voorganger van een order te bepalen (zoals eerder)
-def get_predecessor(order_name, orders):
-    order = orders[order_name]
-    machine = order['machine']
-    seqno = order['seqno']
+# Binary constraint for pred_o: 
+# If seqno[o] > 1, set pred_o[o] equal to the previous order on machine_o.
+# pred_o[o] = 0 if seqno[o] == 1
+prob = 0
+for o in Orders['Order(O)']:
+    prob += pred_o[o] == lpSum([order_sequence_m[m, seqno[o] - 1] for m in Machines['Machine(M)'] if seqno[o] > 1])
     
-    if seqno == 1:
-        return None
-    else:
-        for o, info in orders.items():
-            if info['machine'] == machine and info['seqno'] == seqno - 1:
-                return o
-        return None
+    # For the first order in sequence, there is no predecessor
+    prob += (pred_o[o] == 0) if seqno[o] == 1 else 1
 
 # Functie om de starttijd van een order te bepalen (b_o)
 def get_start_time(order_name, orders, end_times, setup_times):
@@ -115,15 +113,16 @@ def get_start_time(order_name, orders, end_times, setup_times):
         else:
             return None  # Dit zou niet moeten gebeuren als alles correct is
 
-# Assuming the Orders DataFrame is indexed by order names (Order(O))
-for order_name in Orders['Order(O)']:
-    start_times[order_name] = get_start_time(order_name, Orders, start_times, setups_dict)
-    
 # Functie om de eindtijd van een order te berekenen
 def calculate_end_time(order_name, start_times, processing_times):
     b_o = start_times[order_name]
     P_o_m = processing_times[order_name]
     return b_o + P_o_m
+
+# Assuming the Orders DataFrame is indexed by order names (Order(O))
+for order_name in Orders['Order(O)']:
+    start_times[order_name] = get_start_time(order_name, Orders, start_times, setups_dict)
+    
 
 # Functie om de vertraging (lateness) van een order te berekenen
 def calculate_lateness(order_name, end_time, deadline):
@@ -147,7 +146,7 @@ def calculate_schedule_cost(orders, start_times, processing_times, setup_times):
         # Optional: Print order details for debugging
         print(f"Order: {order_name}, Starttijd: {start_times[order_name]}, Eindtijd: {e_o}, Vertraging: {l_o}, Kosten: {C_o * l_o}")
     
-    return total_cost
+    return total_cost, e_o, d_o, l_o, C_o
 
 # Totale kosten van het schema berekenen
 total_cost = calculate_schedule_cost(Orders, start_times, P_o_m, setups_dict)  # Ensure `setups_dict` is defined correctly
@@ -162,7 +161,7 @@ def total_cost_function():
         l_o = calculate_lateness(order_name, end_times[order_name], d_o)
         penalty = Orders.loc[Orders['Order(O)'] == order_name, 'Penalty(c_o)'].values[0]
         total_cost += penalty * l_o
-    return total_cost
+    return total_cost,d_o,l_o,penalty
 
 # Voeg de kostenfunctie toe aan het model
 model += lpSum(total_cost_function()), "Totale_Kosten"
@@ -183,7 +182,7 @@ optimal_total_cost = value(model.objective)
 print(f"Optimale totale kosten: {optimal_total_cost}")
 
 # Voorbeeld debug print in calculate_schedule_cost
-print(f"Order: {order_name}, Starttijd: {start_times.get(order_name)}, Eindtijd: {e_o}, Vertraging: {l_o}, Kosten: {C_o * l_o}")
+#print(f"Order: {order_name}, Starttijd: {start_times.get(order_name)}, Eindtijd: {e_o}, Vertraging: {l_o}, Kosten: {C_o * l_o}")
 
 # pred_o = predecessor of order o on machine_o
 #pred_o = ---                           if sequno_o = 1
