@@ -146,3 +146,65 @@ while not available_orders.empty:
 # Zet resultaten om in een DataFrame voor verdere verwerking
 results_df = pd.DataFrame(results)
 print(results_df)
+
+##############################################################################################################################################
+# Scheduling loop for all machines
+while not available_orders.empty:
+    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
+    
+    if next_order_idx is not None:
+        next_order = available_orders.loc[next_order_idx]
+        
+        # Processing time and setup time calculation
+        if best_machine == "M1":
+            start_time = current_time_m1
+            proc_time = processing_time(next_order_idx, 0)
+            setup_t = setup_time(current_colour_m1, next_order["Colour"]) if current_colour_m1 else 0
+            end_time = start_time + setup_t + proc_time
+            lateness = max(0, end_time - next_order['Deadline'])
+            
+            # Update machine 1's time and color
+            current_time_m1 = end_time
+            current_colour_m1 = next_order["Colour"]
+        
+        elif best_machine == "M2":
+            start_time = current_time_m2
+            proc_time = processing_time(next_order_idx, 1)
+            setup_t = setup_time(current_colour_m2, next_order["Colour"]) if current_colour_m2 else 0
+            end_time = start_time + setup_t + proc_time
+            lateness = max(0, end_time - next_order['Deadline'])
+            
+            # Update machine 2's time and color
+            current_time_m2 = end_time
+            current_colour_m2 = next_order["Colour"]
+        
+        else:
+            start_time = current_time_m3
+            proc_time = processing_time(next_order_idx, 2)
+            setup_t = setup_time(current_colour_m3, next_order["Colour"]) if current_colour_m3 else 0
+            end_time = start_time + setup_t + proc_time
+            lateness = max(0, end_time - next_order['Deadline'])
+            
+            # Update machine 3's time and color
+            current_time_m3 = end_time
+            current_colour_m3 = next_order["Colour"]
+        
+        # Voeg de huidige status van de planning toe aan de resultaten
+        results.append({
+            "Order": next_order['Order'],
+            "Machine": best_machine,
+            "Start Time": start_time,
+            "End Time": end_time,
+            "Colour": next_order['Colour'],
+            "Setup Time": setup_t,
+            "Processing Time": proc_time,
+            "Lateness": lateness,
+            "Penalty Cost": lateness * next_order['Penalty']
+        })
+        
+        # Remove the scheduled order from available orders
+        available_orders.drop(next_order_idx, inplace=True)
+
+# Zet resultaten om in een DataFrame voor verdere verwerking
+results_df = pd.DataFrame(results)
+print(results_df)
