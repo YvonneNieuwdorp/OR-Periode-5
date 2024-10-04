@@ -68,6 +68,7 @@ def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available
         cost_m3 = lateness_m3 * order['Penalty']
         cost_m3 += setup_time(current_colour_m3, order["Colour"]) if current_colour_m3 else 0
         
+        # Update best order and machine based on the minimum cost found
         if cost_m1 < min_cost:
             min_cost = cost_m1
             best_order = index
@@ -82,21 +83,6 @@ def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available
             best_machine = "M3"
     return best_order, best_machine
 
-# Lijst om iteratieresultaten op te slaan
-results = []
-
-# Tabu Search
-# wat moet ik doen:
-# zorgen dat slechtere keuzes geacepteerd worden als er geen betere buren zijn.
-# lijst aanmaken dat hij niet terug kan gaan.
-# 7 keer tabu (niet terugkeren naar zijn vorrige pad) en dan mag het weer.
-# Allereerst: welke buurruimtestructuur ga je toepassen? 
-# Oftewel: welke kleine aanpassingen aan je huidige oplossing ga je overwegen.
-# het begint vanuit het punt dat ik heb gekregen
-# mijn algoritme stopt pas als al mijn iteraties gedaan zijn. 
-# Dus daar moet ik een hoog nummer voor kiezen = 424242424224
-# Het algoritme bepaald de beste optie die niet tabu is. (met een slechtere doelfuntie)
-
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -106,8 +92,11 @@ tabu_size = 7
 best_solution = None
 best_cost = float('inf')
 
-# Aantal iteraties (stel een hoge waarde in zoals je aangaf)
-Aantal_iteraties = 424242424224
+# Aantal iteraties
+Aantal_iteraties = 100
+
+# Lijst om resultaten van alle orders bij te houden
+results = []
 
 # Start de tijdmeting
 start_time = time.time()
@@ -175,7 +164,7 @@ try:
                         "Penalty Cost": current_cost
                     }
 
-                # Voeg de huidige oplossing toe aan de resultaten
+                # Voeg de huidige status van de planning toe aan de resultaten
                 results.append({
                     "Order": next_order['Order'],
                     "Machine": best_machine,
@@ -214,3 +203,16 @@ logging.info(f"Het algoritme duurde {elapsed_time:.2f} seconden om te runnen.")
 print("Beste oplossing:", best_solution)
 print("Beste kosten:", best_cost)
 print(f"Het algoritme heeft {elapsed_time:.2f} seconden geduurd.")
+
+# Converteer de lijst met resultaten naar een DataFrame
+results_df = pd.DataFrame(results)
+
+# Bereken de totale penalty costs
+total_penalty_cost = results_df['Penalty Cost'].sum()
+print("Totale Penalty Cost:", total_penalty_cost)
+
+# Print de DataFrame met de resultaten
+print("Resultaten van de orders:")
+print(results_df)
+
+
