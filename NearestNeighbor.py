@@ -85,65 +85,67 @@ results = []
 
 # Scheduling loop for both machines
 while not available_orders.empty:
-    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
+    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
     
     if next_order_idx is not None:
         next_order = available_orders.loc[next_order_idx]
-        scheduled_orders.append((next_order, best_machine))
         
+        # Bereken de starttijd, verwerkingstijd en setuptijd
         if best_machine == "M1":
-            # Update machine 1's time and color
-            current_time_m1 += processing_time(next_order_idx, 0)
-            current_time_m1 += setup_time(current_colour_m1, next_order["Colour"])
+            setup = setup_time(current_colour_m1, next_order["Colour"])
+            processing = processing_time(next_order_idx, 0)
+            start_time = current_time_m1 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m1 = finish_time
             current_colour_m1 = next_order["Colour"]
+
         elif best_machine == "M2":
-            # Update machine 2's time and color
-            current_time_m2 += processing_time(next_order_idx, 1)
-            current_time_m2 += setup_time(current_colour_m2, next_order["Colour"])
+            setup = setup_time(current_colour_m2, next_order["Colour"])
+            processing = processing_time(next_order_idx, 1)
+            start_time = current_time_m2 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m2 = finish_time
             current_colour_m2 = next_order["Colour"]
-            
-        else:
-            # Update machine 3's time and color
-            current_time_m3 += processing_time(next_order_idx, 2)
-            current_time_m3 += setup_time(current_colour_m3, next_order["Colour"])
+
+        else:  # best_machine == "M3"
+            setup = setup_time(current_colour_m3, next_order["Colour"])
+            processing = processing_time(next_order_idx, 2)
+            start_time = current_time_m3 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m3 = finish_time
             current_colour_m3 = next_order["Colour"]
-        
 
         # Voeg de huidige status van de planning toe aan de resultaten
         results.append({
             "Order": next_order['Order'],
             "Machine": best_machine,
-            "Start Time": current_time_m1 if best_machine == "M1" else current_time_m2 if best_machine == "M2" else current_time_m3,
+            "Start Time": start_time,
+            "Finish Time": finish_time,
             "Colour": next_order['Colour'],
-            "Setup Time": setup_time(current_colour_m1, next_order["Colour"]),
-            "Processing Time": processing_time(next_order_idx, 0 if best_machine == "M1" else 1 if best_machine == "M2" else 2)
+            "Setup Time": setup,
+            "Processing Time": processing,
+            "Lateness": lateness,
+            "Penalty Cost": lateness * next_order['Penalty']
         })
-        
-        # Remove the scheduled order from available orders
+
+        # Verwijder de geplande order uit de beschikbare orders
         available_orders.drop(next_order_idx, inplace=True)
-
-
 
 # Zet resultaten om in een DataFrame voor verdere verwerking
 results_df = pd.DataFrame(results)
+
+# Sorteren op starttijd voor overzicht
+results_df = results_df.sort_values(by='Start Time')
+
+# Print of exporteer het resultaat
 print(results_df)
 
 
-## Discret Improving Search
-import logging
-logger = logging.getLogger(name='2opt-logger')
-logging.basicConfig(level=logging.INFO,
-                    format='[%(asctime)s] %(message)s',
-                    handlers=[logging.FileHandler("2opt.log")])
 
-#def best_improvement(order, machine, scheduled_orders):
-    #""" verbetert het gegeven schema
-    #Parameters: 
-    #    dat weten we zelf ook nog niet
-    #Output: aangepast schema waarbij er minder pentaltycosts zijn
-    #"""
-    #logger.debug(msg="Apply Discrete Improving Search with 2-exchange neighborhood and best improvement on TSP (2-opt)")
-    #while True: 
-        #max_gain = 30
-        #fi_move_found = False
-        #for i in range(1, ):
+
+
+
+
