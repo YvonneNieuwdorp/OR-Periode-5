@@ -156,8 +156,98 @@ print(results_df)
 # Dus daar moet ik een hoog nummer voor kiezen = 424242424224
 # Het algoritme bepaald de beste optie die niet tabu is. (met een slechtere doelfuntie)
 
-Aantal_iteraties = 424242424242
-tabu_lijst = []
+# Variabelen voor tabu search
+tabu_list = []
+tabu_size = 7
+best_solution = None
+best_cost = float('inf')
+
+# Aantal iteraties (stel een hoge waarde in zoals je aangaf)
+Aantal_iteraties = 424242424224
+
+# Hoofdloop voor iteraties
+for iteration in range(Aantal_iteraties):
+    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
+    
+    # Check of de huidige oplossing in de tabu-lijst zit
+    if next_order_idx in tabu_list:
+        continue  # sla over als deze oplossing tabu is
+    
+    if next_order_idx is not None:
+        next_order = available_orders.loc[next_order_idx]
+
+        # Bereken de starttijd, verwerkingstijd en setuptijd
+        if best_machine == "M1":
+            setup = setup_time(current_colour_m1, next_order["Colour"])
+            processing = processing_time(next_order_idx, 0)
+            start_time = current_time_m1 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m1 = finish_time
+            current_colour_m1 = next_order["Colour"]
+
+        elif best_machine == "M2":
+            setup = setup_time(current_colour_m2, next_order["Colour"])
+            processing = processing_time(next_order_idx, 1)
+            start_time = current_time_m2 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m2 = finish_time
+            current_colour_m2 = next_order["Colour"]
+
+        else:  # best_machine == "M3"
+            setup = setup_time(current_colour_m3, next_order["Colour"])
+            processing = processing_time(next_order_idx, 2)
+            start_time = current_time_m3 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m3 = finish_time
+            current_colour_m3 = next_order["Colour"]
+
+        # Bereken de kosten voor de huidige oplossing
+        current_cost = lateness * next_order['Penalty']
+
+        # Update de beste oplossing als de huidige beter is
+        if current_cost < best_cost:
+            best_cost = current_cost
+            best_solution = {
+                "Order": next_order['Order'],
+                "Machine": best_machine,
+                "Start Time": start_time,
+                "Finish Time": finish_time,
+                "Colour": next_order['Colour'],
+                "Setup Time": setup,
+                "Processing Time": processing,
+                "Lateness": lateness,
+                "Penalty Cost": current_cost
+            }
+
+        # Voeg de huidige oplossing toe aan de resultaten
+        results.append({
+            "Order": next_order['Order'],
+            "Machine": best_machine,
+            "Start Time": start_time,
+            "Finish Time": finish_time,
+            "Colour": next_order['Colour'],
+            "Setup Time": setup,
+            "Processing Time": processing,
+            "Lateness": lateness,
+            "Penalty Cost": current_cost
+        })
+
+        # Verwijder de geplande order uit de beschikbare orders
+        available_orders.drop(next_order_idx, inplace=True)
+
+        # Voeg de oplossing toe aan de tabu-lijst
+        tabu_list.append(next_order_idx)
+
+        # Beperk de grootte van de tabu-lijst
+        if len(tabu_list) > tabu_size:
+            tabu_list.pop(0)
+
+# Print de beste oplossing
+print("Beste oplossing:", best_solution)
+print("Beste kosten:", best_cost)
 
 
 
