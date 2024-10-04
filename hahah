@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import scipy.stats as sp
 import matplotlib.pyplot as plt
+import time
+import logging
 
 Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
 Machines = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Machines')
@@ -38,34 +40,28 @@ def setup_time(prev_colour, new_colour):
     else:
         return 0 
 
-def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2,current_colour_m3):
-    """ Berekent de oplossing die het dichtbij het meest optimaal is, gebaseerd op minimale kosten
-    Parameters
-        - current_time: huidige tijd
-        - available_order: orders die nog beschikbaar zijn, niet uitgevoerd
-        - current_colour: huidige kleur
-    Output: order die in huidige reeks het meest optimaal is
-    """
+def nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3):
     best_order = None
     best_machine = None
     min_cost = float('inf')
 
-    for index, order in available_orders.iterrows(): 
-        time_to_finish_m1 = current_time_m1 + processing_time(index, 0)
+    for index, order in available_orders.iterrows():
+        # Kosten voor M1
+        time_to_finish_m1 = current_time_m1 + setup_time(current_colour_m1, order["Colour"]) + processing_time(index, 0)
         lateness_m1 = max(0, time_to_finish_m1 - order['Deadline'])
         cost_m1 = lateness_m1 * order['Penalty']
-        cost_m1 += setup_time(current_colour_m1, order["Colour"]) if current_colour_m1 else 0
 
-        time_to_finish_m2 = current_time_m2 + processing_time(index, 1)
+        # Kosten voor M2
+        time_to_finish_m2 = current_time_m2 + setup_time(current_colour_m2, order["Colour"]) + processing_time(index, 1)
         lateness_m2 = max(0, time_to_finish_m2 - order['Deadline'])
         cost_m2 = lateness_m2 * order['Penalty']
-        cost_m2 += setup_time(current_colour_m2, order["Colour"]) if current_colour_m2 else 0
 
-        time_to_finish_m3 = current_time_m3 + processing_time(index, 2)
+        # Kosten voor M3
+        time_to_finish_m3 = current_time_m3 + setup_time(current_colour_m3, order["Colour"]) + processing_time(index, 2)
         lateness_m3 = max(0, time_to_finish_m3 - order['Deadline'])
         cost_m3 = lateness_m3 * order['Penalty']
-        cost_m3 += setup_time(current_colour_m3, order["Colour"]) if current_colour_m3 else 0
-        
+
+        # Vergelijk met minimum kosten en sla de beste op
         if cost_m1 < min_cost:
             min_cost = cost_m1
             best_order = index
@@ -78,133 +74,153 @@ def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available
             min_cost = cost_m3
             best_order = index
             best_machine = "M3"
+
     return best_order, best_machine
+
 
 # Lijst om iteratieresultaten op te slaan
 results = []
 
-# Scheduling loop for both machines
-while not available_orders.empty:
-    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
-    
-    if next_order_idx is not None:
-        next_order = available_orders.loc[next_order_idx]
-        scheduled_orders.append((next_order, best_machine))
-        
-        if best_machine == "M1":
-            # Update machine 1's time and color
-            current_time_m1 += processing_time(next_order_idx, 0)
-            current_time_m1 += setup_time(current_colour_m1, next_order["Colour"])
-            current_colour_m1 = next_order["Colour"]
-            start_time = current_time_m1
-            proc_time = processing_time(next_order_idx, 0)
-            setup_t = setup_time(current_colour_m1, next_order["Colour"]) if current_colour_m1 else 0
-            end_time = start_time + setup_t + proc_time
-            lateness = max(0, end_time - next_order['Deadline'])
+# Tabu Search
+# wat moet ik doen:
+# zorgen dat slechtere keuzes geacepteerd worden als er geen betere buren zijn.
+# lijst aanmaken dat hij niet terug kan gaan.
+# 7 keer tabu (niet terugkeren naar zijn vorrige pad) en dan mag het weer.
+# Allereerst: welke buurruimtestructuur ga je toepassen? 
+# Oftewel: welke kleine aanpassingen aan je huidige oplossing ga je overwegen.
+# het begint vanuit het punt dat ik heb gekregen
+# mijn algoritme stopt pas als al mijn iteraties gedaan zijn. 
+# Dus daar moet ik een hoog nummer voor kiezen = 424242424224
+# Het algoritme bepaald de beste optie die niet tabu is. (met een slechtere doelfuntie)
 
-        elif best_machine == "M2":
-            # Update machine 2's time and color
-            current_time_m2 += processing_time(next_order_idx, 1)
-            current_time_m2 += setup_time(current_colour_m2, next_order["Colour"])
-            current_colour_m2 = next_order["Colour"]
-            start_time = current_time_m2
-            proc_time = processing_time(next_order_idx, 1)
-            setup_t = setup_time(current_colour_m2, next_order["Colour"]) if current_colour_m2 else 0
-            end_time = start_time + setup_t + proc_time
-            lateness = max(0, end_time - next_order['Deadline'])
-            
-        
-            
-        else:
-            # Update machine 3's time and color
-            current_time_m3 += processing_time(next_order_idx, 2)
-            current_time_m3 += setup_time(current_colour_m3, next_order["Colour"])
-            current_colour_m3 = next_order["Colour"]
-            start_time = current_time_m3
-            proc_time = processing_time(next_order_idx, 2)
-            setup_t = setup_time(current_colour_m3, next_order["Colour"]) if current_colour_m3 else 0
-            end_time = start_time + setup_t + proc_time
-            lateness = max(0, end_time - next_order['Deadline'])
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-        
-        # Voeg de huidige status van de planning toe aan de resultaten
-        results.append({
-            "Order": next_order['Order'],
-            "Machine": best_machine,
-            "Start Time": start_time,
-            "End Time": end_time,
-            "Colour": next_order['Colour'],
-            "Setup Time": setup_t,
-            "Processing Time": proc_time,
-            "Lateness": lateness,
-            "Penalty Cost": lateness * next_order['Penalty']
-        })
-        
-        # Remove the scheduled order from available orders
-        available_orders.drop(next_order_idx, inplace=True)
+# Variabelen voor tabu search
+tabu_list = []
+tabu_size = 7
+best_solution = None
+best_cost = float('inf')
 
-# Zet resultaten om in een DataFrame voor verdere verwerking
+# Aantal iteraties (stel een hoge waarde in zoals je aangaf)
+Aantal_iteraties = 100
+
+# Lijst om resultaten van alle orders bij te houden
+results = []
+
+# Start de tijdmeting
+start_time = time.time()
+
+# Hoofdloop voor iteraties
+try:
+    for iteration in range(Aantal_iteraties):
+        logging.info(f"Iteratie {iteration + 1} van {Aantal_iteraties}")
+        
+        # Nearest neighbor keuze voor de volgende order
+        next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
+        
+        if next_order_idx in tabu_list:
+            logging.info(f"Order {next_order_idx} is tabu, overslaan...")
+            continue  # sla over als deze oplossing tabu is
+        
+        if next_order_idx is not None:
+            next_order = available_orders.loc[next_order_idx]
+
+            # Probeer de verwerking voor de gekozen machine
+            try:
+                if best_machine == "M1":
+                    setup = setup_time(current_colour_m1, next_order["Colour"])
+                    processing = processing_time(next_order_idx, 0)
+                    start_time_order = current_time_m1 + setup
+                    finish_time = start_time_order + processing
+                    lateness = max(0, finish_time - next_order['Deadline'])
+                    current_time_m1 = finish_time
+                    current_colour_m1 = next_order["Colour"]
+
+                elif best_machine == "M2":
+                    setup = setup_time(current_colour_m2, next_order["Colour"])
+                    processing = processing_time(next_order_idx, 1)
+                    start_time_order = current_time_m2 + setup
+                    finish_time = start_time_order + processing
+                    lateness = max(0, finish_time - next_order['Deadline'])
+                    current_time_m2 = finish_time
+                    current_colour_m2 = next_order["Colour"]
+
+                else:  # best_machine == "M3":
+                    setup = setup_time(current_colour_m3, next_order["Colour"])
+                    processing = processing_time(next_order_idx, 2)
+                    start_time_order = current_time_m3 + setup
+                    finish_time = start_time_order + processing
+                    lateness = max(0, finish_time - next_order['Deadline'])
+                    current_time_m3 = finish_time
+                    current_colour_m3 = next_order["Colour"]
+
+                # Bereken de kosten voor de huidige oplossing
+                current_cost = lateness * next_order['Penalty']
+
+                # Update de beste oplossing als de huidige beter is
+                if current_cost < best_cost:
+                    logging.info(f"Nieuwe beste oplossing gevonden met kosten: {current_cost}")
+                    best_cost = current_cost
+                    best_solution = {
+                        "Order": next_order['Order'],
+                        "Machine": best_machine,
+                        "Start Time": start_time_order,
+                        "Finish Time": finish_time,
+                        "Colour": next_order['Colour'],
+                        "Setup Time": setup,
+                        "Processing Time": processing,
+                        "Lateness": lateness,
+                        "Penalty Cost": current_cost
+                    }
+
+                # Voeg de huidige status van de planning toe aan de resultaten
+                results.append({
+                    "Order": next_order['Order'],
+                    "Machine": best_machine,
+                    "Start Time": start_time_order,
+                    "Finish Time": finish_time,
+                    "Colour": next_order['Colour'],
+                    "Setup Time": setup,
+                    "Processing Time": processing,
+                    "Lateness": lateness,
+                    "Penalty Cost": current_cost
+                })
+
+                # Verwijder de geplande order uit de beschikbare orders
+                available_orders.drop(next_order_idx, inplace=True)
+
+                # Voeg de oplossing toe aan de tabu-lijst
+                tabu_list.append(next_order_idx)
+
+                # Beperk de grootte van de tabu-lijst
+                if len(tabu_list) > tabu_size:
+                    tabu_list.pop(0)
+
+            except Exception as e:
+                logging.error(f"Fout tijdens verwerken van order {next_order_idx}: {str(e)}")
+                raise
+
+except Exception as e:
+    logging.error(f"Algoritme gestopt vanwege een fout: {str(e)}")
+
+# Eindtijd en duur berekenen
+end_time = time.time()
+elapsed_time = end_time - start_time
+logging.info(f"Het algoritme duurde {elapsed_time:.2f} seconden om te runnen.")
+
+# Print de beste oplossing en de looptijd
+print("Beste oplossing:", best_solution)
+print("Beste kosten:", best_cost)
+print(f"Het algoritme heeft {elapsed_time:.2f} seconden geduurd.")
+
+# Converteer de lijst met resultaten naar een DataFrame
 results_df = pd.DataFrame(results)
+
+# Print de DataFrame met de resultaten
+print("Resultaten van de orders:")
 print(results_df)
 
-##############################################################################################################################################
-# Scheduling loop for all machines
-while not available_orders.empty:
-    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
-    
-    if next_order_idx is not None:
-        next_order = available_orders.loc[next_order_idx]
-        
-        # Processing time and setup time calculation
-        if best_machine == "M1":
-            start_time = current_time_m1
-            proc_time = processing_time(next_order_idx, 0)
-            setup_t = setup_time(current_colour_m1, next_order["Colour"]) if current_colour_m1 else 0
-            end_time = start_time + setup_t + proc_time
-            lateness = max(0, end_time - next_order['Deadline'])
-            
-            # Update machine 1's time and color
-            current_time_m1 = end_time
-            current_colour_m1 = next_order["Colour"]
-        
-        elif best_machine == "M2":
-            start_time = current_time_m2
-            proc_time = processing_time(next_order_idx, 1)
-            setup_t = setup_time(current_colour_m2, next_order["Colour"]) if current_colour_m2 else 0
-            end_time = start_time + setup_t + proc_time
-            lateness = max(0, end_time - next_order['Deadline'])
-            
-            # Update machine 2's time and color
-            current_time_m2 = end_time
-            current_colour_m2 = next_order["Colour"]
-        
-        else:
-            start_time = current_time_m3
-            proc_time = processing_time(next_order_idx, 2)
-            setup_t = setup_time(current_colour_m3, next_order["Colour"]) if current_colour_m3 else 0
-            end_time = start_time + setup_t + proc_time
-            lateness = max(0, end_time - next_order['Deadline'])
-            
-            # Update machine 3's time and color
-            current_time_m3 = end_time
-            current_colour_m3 = next_order["Colour"]
-        
-        # Voeg de huidige status van de planning toe aan de resultaten
-        results.append({
-            "Order": next_order['Order'],
-            "Machine": best_machine,
-            "Start Time": start_time,
-            "End Time": end_time,
-            "Colour": next_order['Colour'],
-            "Setup Time": setup_t,
-            "Processing Time": proc_time,
-            "Lateness": lateness,
-            "Penalty Cost": lateness * next_order['Penalty']
-        })
-        
-        # Remove the scheduled order from available orders
-        available_orders.drop(next_order_idx, inplace=True)
-
-# Zet resultaten om in een DataFrame voor verdere verwerking
-results_df = pd.DataFrame(results)
-print(results_df)
+# Eventueel de resultaten opslaan naar een Excel- of CSV-bestand
+# results_df.to_csv('beste_planning.csv', index=False)
+# results_df.to_excel('beste_planning.xlsx', index=False)
