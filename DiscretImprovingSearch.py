@@ -1,0 +1,265 @@
+import random
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import pandas as pd
+import numpy as np
+import scipy.stats as sp
+
+Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
+Machines = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Machines')
+Setups = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Setups')
+
+current_time_m1 = 0
+current_time_m2 = 0
+current_time_m3 = 0
+scheduled_orders = []
+available_orders = Orders.copy()
+current_colour_m1 = None
+current_colour_m2 = None
+current_colour_m3 = None
+
+def processing_time(ordernumber, number_of_machine):
+    """ Functie die de processing time berekent
+    Parameters: 
+        - ordernummer, als een int
+        - machine die gebruikt wordt, als een int
+    Output: de tijd die nodig is om de order uit te voeren/processingtime
+    """
+    return Orders.loc[ordernumber, 'Surface']/ Machines.loc[number_of_machine, 'Speed']
+
+def setup_time(prev_colour, new_colour):
+    """ geeft de setuptime aan
+    Parameters
+        - previous color als een string
+        - new color als een string
+    Output: setup_time
+    """
+    result = Setups.loc[(Setups['From colour'] == prev_colour) & (Setups['To colour'] == new_colour), 'Setup time']
+    if not result.empty:
+        return result.values[0]
+    else:
+        return 0 
+
+def total_schedule_cost(results_df):
+    """ Berekent de totale kosten van de schedule
+    Parameters:
+        - results_df: DataFrame met de resultaten van het scheduling proces
+    Output: 
+        - Totaal van penaltykosten 
+    """
+    return results_df['Penalty Cost'].sum()
+
+def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2,current_colour_m3):
+    """ Berekent de oplossing die het dichtbij het meest optimaal is, gebaseerd op minimale kosten
+    Parameters
+        - current_time: huidige tijd
+        - available_order: orders die nog beschikbaar zijn, niet uitgevoerd
+        - current_colour: huidige kleur
+    Output: order die in huidige reeks het meest optimaal is
+    """
+    best_order = None
+    best_machine = None
+    min_cost = float('inf')
+
+    for index, order in available_orders.iterrows(): 
+        time_to_finish_m1 = current_time_m1 + processing_time(index, 0)
+        lateness_m1 = max(0, time_to_finish_m1 - order['Deadline'])
+        cost_m1 = lateness_m1 * order['Penalty']
+        cost_m1 += setup_time(current_colour_m1, order["Colour"]) if current_colour_m1 else 0
+
+        time_to_finish_m2 = current_time_m2 + processing_time(index, 1)
+        lateness_m2 = max(0, time_to_finish_m2 - order['Deadline'])
+        cost_m2 = lateness_m2 * order['Penalty']
+        cost_m2 += setup_time(current_colour_m2, order["Colour"]) if current_colour_m2 else 0
+
+        time_to_finish_m3 = current_time_m3 + processing_time(index, 2)
+        lateness_m3 = max(0, time_to_finish_m3 - order['Deadline'])
+        cost_m3 = lateness_m3 * order['Penalty']
+        cost_m3 += setup_time(current_colour_m3, order["Colour"]) if current_colour_m3 else 0
+        
+        if cost_m1 < min_cost:
+            min_cost = cost_m1
+            best_order = index
+            best_machine = "M1"
+        if cost_m2 < min_cost:
+            min_cost = cost_m2
+            best_order = index
+            best_machine = "M2"
+        if cost_m3 < min_cost:
+            min_cost = cost_m3
+            best_order = index
+            best_machine = "M3"
+    return best_order, best_machine
+
+results = []
+
+while not available_orders.empty:
+    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
+    
+    if next_order_idx is not None:
+        next_order = available_orders.loc[next_order_idx]
+        
+        if best_machine == "M1":
+            setup = setup_time(current_colour_m1, next_order["Colour"])
+            processing = processing_time(next_order_idx, 0)
+            start_time = current_time_m1 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m1 = finish_time
+            current_colour_m1 = next_order["Colour"]
+
+        elif best_machine == "M2":
+            setup = setup_time(current_colour_m2, next_order["Colour"])
+            processing = processing_time(next_order_idx, 1)
+            start_time = current_time_m2 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m2 = finish_time
+            current_colour_m2 = next_order["Colour"]
+
+        else:  # best_machine == "M3"
+            setup = setup_time(current_colour_m3, next_order["Colour"])
+            processing = processing_time(next_order_idx, 2)
+            start_time = current_time_m3 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - next_order['Deadline'])
+            current_time_m3 = finish_time
+            current_colour_m3 = next_order["Colour"]
+
+        results.append({
+            "Order": next_order['Order'],
+            "Machine": best_machine,
+            "Start Time": start_time,
+            "Finish Time": finish_time,
+            "Colour": next_order['Colour'],
+            "Setup Time": setup,
+            "Processing Time": processing,
+            "Lateness": lateness,
+            "Penalty Cost": lateness * next_order['Penalty']
+        })
+
+        available_orders.drop(next_order_idx, inplace=True)
+
+results_df = pd.DataFrame(results)
+results_df = results_df.sort_values(by='Start Time')
+
+def swap_orders(results_df):
+    """Swap two randomly selected orders in the schedule.
+    Parameter: 
+        - results_df: DataFrame, feasible solutions, put in a DataFrame
+    Output:
+        - new_schedule: DataFrame
+    """
+    new_schedule = results_df.copy()
+    idx1, idx2 = random.sample(range(len(new_schedule)), 2)
+    temp = new_schedule.iloc[idx1].copy() # de hele rij verwisselen in DataFrame
+    new_schedule.iloc[idx1] = new_schedule.iloc[idx2]
+    new_schedule.iloc[idx2] = temp
+    return new_schedule
+
+def reassign_machine(results_df):
+    """Reassign a randomly selected order to a different machine.
+    Parameters:     
+    - results_df: DataFrame
+        feasible solutions, put in a DataFrame
+    Output: new_schedule
+    """
+    new_schedule = results_df.copy()
+    idx = random.randint(0, len(new_schedule) - 1)
+    
+    machines = ["M1", "M2", "M3"]
+    current_machine = new_schedule.iloc[idx]["Machine"]
+    new_machine = random.choice([m for m in machines if m != current_machine])
+    new_schedule.at[idx, "Machine"] = new_machine
+    
+    return new_schedule
+
+def discrete_improving_search(results_df, iterations=100):
+    """Perform Discrete Improving Search to improve the schedule.
+    Parameters: 
+        - results_df: DataFrame
+            current schedule which works
+        - iterations: int
+    Output: best_schedule: DataFrame
+        Best schedule in the local optimum
+    """
+    best_schedule = results_df.copy()
+    best_cost = total_schedule_cost(best_schedule)
+    
+    for i in range(iterations):
+        # Ontwerpt neighbor door het verwisselen van machines of orders
+        if random.random() < 0.5:
+            new_schedule = swap_orders(best_schedule)
+        else:
+            new_schedule = reassign_machine(best_schedule)
+        
+        #opnieuw berekenen nieuwe waarden voor tabel
+        for idx, row in new_schedule.iterrows():
+            order_idx = Orders[Orders['Order'] == row['Order']].index[0]
+            machine_idx = {"M1": 0, "M2": 1, "M3": 2}[row["Machine"]]
+            setup = setup_time(new_schedule.iloc[idx-1]["Colour"] if idx > 0 else None, row["Colour"])
+            processing = processing_time(order_idx, machine_idx)
+            start_time = new_schedule.iloc[idx-1]["Finish Time"] if idx > 0 else 0 + setup
+            finish_time = start_time + processing
+            lateness = max(0, finish_time - Orders.loc[order_idx, 'Deadline'])
+            penalty_cost = lateness * Orders.loc[order_idx, 'Penalty']
+            
+            new_schedule.at[idx, 'Start Time'] = start_time
+            new_schedule.at[idx, 'Finish Time'] = finish_time
+            new_schedule.at[idx, 'Setup Time'] = setup
+            new_schedule.at[idx, 'Processing Time'] = processing
+            new_schedule.at[idx, 'Lateness'] = lateness
+            new_schedule.at[idx, 'Penalty Cost'] = penalty_cost
+        
+        new_cost = total_schedule_cost(new_schedule)
+        
+        # als nieuwe schema beter is, update
+        if new_cost < best_cost:
+            best_schedule = new_schedule.copy()
+            best_cost = new_cost
+    
+    return best_schedule
+
+improved_schedule = discrete_improving_search(results_df, iterations=200)
+
+print(improved_schedule)
+print(f"Initial cost: {total_schedule_cost(results_df)}")
+print(f"Improved cost: {total_schedule_cost(improved_schedule)}")
+
+def plot_gantt_chart(schedule_df):
+    """Visualize the scheduling process using a Gantt chart and add order labels.
+    Parameters: schedule_df: DataFrame
+    Output: visualised DataFrame/order
+    """
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    colours = {
+        "Red": "red",
+        "Blue": "blue",
+        "Green": "green",
+        "Yellow": "yellow"
+    }
+
+    for idx, row in schedule_df.iterrows():
+        machine = row["Machine"]
+        start = row["Start Time"]
+        finish = row["Finish Time"]
+        order_colour = row["Colour"]
+        order_name = row["Order"]
+        machine_idx = {"M1": 0, "M2": 1, "M3": 2}[machine]
+        
+        ax.barh(machine, finish - start, left=start, color=colours[order_colour], edgecolor='black')
+        ax.text(start + (finish - start) / 2, machine, order_name, va='center', ha='center', color='white', fontsize=10)
+
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Machines")
+    ax.set_title(f"Gantt Chart of Order Scheduling")
+
+    legend_patches = [mpatches.Patch(color=col, label=col) for col in colours.values()]
+    ax.legend(handles=legend_patches, title="Order Colours")
+
+    plt.show()
+
+plot_gantt_chart(results_df)
+plot_gantt_chart(improved_schedule)
+
