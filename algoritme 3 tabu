@@ -88,12 +88,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Variabelen voor tabu search
 tabu_list = []
-tabu_size = 5
+tabu_size = 2
 best_solution = None
 best_cost = float('inf')
 
 # Aantal iteraties
-Aantal_iteraties = 100000
+Aantal_iteraties = 10
 
 # Lijst om resultaten van alle orders bij te houden
 results = []
