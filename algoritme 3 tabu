@@ -88,12 +88,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Variabelen voor tabu search
 tabu_list = []
-tabu_size = 2
+tabu_size = 7
 best_solution = None
 best_cost = float('inf')
 
 # Aantal iteraties
-Aantal_iteraties = 10
+Aantal_iteraties = 100000
 
 # Lijst om resultaten van alle orders bij te houden
 results = []
@@ -268,3 +268,17 @@ def plot_gantt_chart(schedule_df):
 
 # Voorbeeld aanroepen van de functie met de results_df DataFrame
 plot_gantt_chart(results_df)
+
+# Exporteer resultaten naar een Excel-bestand
+output_filename = 'algoritme_resultaten_goed.xlsx'
+with pd.ExcelWriter(output_filename) as writer:
+    # Schrijf het resultaat van alle orders naar een werkblad
+    results_df.to_excel(writer, sheet_name='Orders_Resultaten', index=False)
+    
+    # Maak een DataFrame voor de beste oplossing en schrijf het naar een werkblad
+    if best_solution:
+        best_solution_df = pd.DataFrame([best_solution])
+        best_solution_df.to_excel(writer, sheet_name='Beste_Oplossing', index=False)
+
+# Bevestiging van het opslaan van het bestand
+print(f"Resultaten zijn opgeslagen in '{output_filename}'")
