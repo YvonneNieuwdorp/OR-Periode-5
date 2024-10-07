@@ -241,45 +241,54 @@ print(f"Improved cost: {total_schedule_cost(improved_schedule):.2f}")
 print(f"Time taken: {end_time - start_time:.2f} seconds")  # Tijd berekenen en printen
 
 def plot_gantt_chart(schedule_df):
-    """Visualize the scheduling process using a Gantt chart and add order labels.
-    Parameters: 
-        - schedule_df: DataFrame, complete schedule
-    Output: 
-        - Gantt Chart of schedule
+    """Visualize the scheduling process using a Gantt chart with setup and processing times indicated separately.
+    
+    Parameters:
+        schedule_df: DataFrame with columns 'Machine', 'Order', 'Start Time', 'Finish Time', 'Colour', 'Setup Time', and 'Processing Time'.
     """
     fig, ax = plt.subplots(figsize=(12, 6))
-
-    # Create color map for different orders
     colours = {
         "Red": "red",
         "Blue": "blue",
         "Green": "green",
-        "Yellow": "yellow"
+        "Yellow": "yellow",
+        "Setup": "grey"  # Color for setup time
     }
 
-    # Iterate over each row in the schedule
     for idx, row in schedule_df.iterrows():
         machine = row["Machine"]
         start = row["Start Time"]
-        finish = row["Finish Time"]
+        setup_duration = row["Setup Time"]
+        processing_duration = row["Processing Time"]
         order_colour = row["Colour"]
         order_name = row["Order"]
-        machine_idx = {"M1": 0, "M2": 1, "M3": 2}[machine]  # Y-axis position for each machine
-        # Plot each order as a colored block on the Gantt chart
-        ax.barh(machine, finish - start, left=start, color=colours[order_colour], edgecolor='black')
-        # Add order name inside the block (centered)
-        ax.text(start + (finish - start) / 2, machine, order_name, va='center', ha='center', color='white', fontsize=10)
 
-    # Labeling the chart
+        # Index voor de machine-positie
+        machine_idx = {"M1": 0, "M2": 1, "M3": 2}[machine]
+
+        # Setup time bar
+        ax.barh(machine_idx, setup_duration, left=start, color=colours["Setup"], edgecolor='black')
+
+        # Processing time bar
+        ax.barh(machine_idx, processing_duration, left=start + setup_duration, color=colours[order_colour], edgecolor='black')
+        
+        # Label in the center of the processing time
+        ax.text(start + setup_duration + (processing_duration / 2), machine_idx, order_name, va='center', ha='center', color='white', fontsize=10)
+
+    ax.set_yticks([0, 1, 2])
+    ax.set_yticklabels(["M1", "M2", "M3"])
     ax.set_xlabel("Time")
     ax.set_ylabel("Machines")
-    ax.set_title(f"Gantt Chart of Order Scheduling")
+    ax.set_title("Gantt Chart of Order Scheduling with Setup and Processing Times")
 
-    # Adding a legend based on the colours used
-    legend_patches = [mpatches.Patch(color=col, label=col) for col in colours.values()]
-    ax.legend(handles=legend_patches, title="Order Colours")
+    # Legend for order colors and setup time
+    legend_patches = [mpatches.Patch(color=col, label=label) for label, col in colours.items()]
+    ax.legend(handles=legend_patches, title="Order Colours and Setup Time")
 
     plt.show()
+
+# Voorbeeld aanroepen van de functie met de results_df DataFrame
+plot_gantt_chart(results_df)
 
 # Sla de verbeterde planning op in een Excel-bestand
 output_file = 'improved_schedule.xlsx'
