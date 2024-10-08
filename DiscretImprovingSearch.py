@@ -292,7 +292,7 @@ plot_gantt_chart(results_df)
 
 # Sla de verbeterde planning op in een Excel-bestand
 output_file = 'improved_schedule.xlsx'
-improved_schedule.to_excel(output_file, index=False)
+#improved_schedule.to_excel(output_file, index=False)
 
 plot_gantt_chart(improved_schedule)
 

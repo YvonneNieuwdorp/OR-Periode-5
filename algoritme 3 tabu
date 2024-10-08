@@ -98,6 +98,8 @@ Aantal_iteraties = 100000
 # Lijst om resultaten van alle orders bij te houden
 results = []
 
+# lijn van code verslechtering toelaat.
+
 # Start de tijdmeting
 start_time = time.time()
 
@@ -247,12 +249,15 @@ def plot_gantt_chart(schedule_df):
 
         # Setup time bar
         ax.barh(machine_idx, setup_duration, left=start, color=colours["Setup"], edgecolor='black')
-
+        
         # Processing time bar
         ax.barh(machine_idx, processing_duration, left=start + setup_duration, color=colours[order_colour], edgecolor='black')
         
         # Label in the center of the processing time
         ax.text(start + setup_duration + (processing_duration / 2), machine_idx, order_name, va='center', ha='center', color='white', fontsize=10)
+
+         # Label in the center of the processing time
+        ax.text(start + (processing_duration / 2), machine_idx, order_name, va='center', ha='center', color='white', fontsize=10)
 
     ax.set_yticks([0, 1, 2])
     ax.set_yticklabels(["M1", "M2", "M3"])
@@ -281,4 +286,9 @@ with pd.ExcelWriter(output_filename) as writer:
         best_solution_df.to_excel(writer, sheet_name='Beste_Oplossing', index=False)
 
 # Bevestiging van het opslaan van het bestand
-print(f"Resultaten zijn opgeslagen in '{output_filename}'")
+#print(f"Resultaten zijn opgeslagen in '{output_filename}'")
+
+# een betere oplossingruimte:
+# bij op-4 kan je alleen maar 4 orders op de zelfde machine omdraaien en 4 orders op verschillende machines omdraaien
+# Dus we kunnen met ook zo maken dat een order naar een maschine kan gaan zonder dat er gewisseld hoeft te worden.
+# 
