@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 import scipy.stats as sp
 import matplotlib.pyplot as plt
+import random
+import matplotlib.patches as mpatches
+import time
 
 # Laad de gegevens
 Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
@@ -248,7 +251,7 @@ start_time = time.time()  # Start tijd opnemen
 improved_schedule = discrete_improving_search(results_df_nn, iterations=10000)
 end_time = time.time()  # Eindtijd opnemen
 
-print(f"Initial cost: {total_schedule_cost(results_df):.2f}")
+print(f"Initial cost: {total_schedule_cost(results_df_nn):.2f}")
 print(f"Improved cost: {total_schedule_cost(improved_schedule):.2f}")
 print(f"Time taken: {end_time - start_time:.2f} seconds")  # Tijd berekenen en printen
 
