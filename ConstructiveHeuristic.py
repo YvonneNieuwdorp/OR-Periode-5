@@ -167,3 +167,12 @@ print(results_df_ch)
 
 print("\nResults from Deadline Scheduling:")
 print(results_df_dl)
+
+results_df_ch = pd.DataFrame(results_df_ch)
+results_df_dl = pd.DataFrame(results_df_dl)
+
+df_ch = 'Schedule Constructive Heuristic Best Costs.xlsx'
+df_dl = 'Schedule Constructive Heuristic Deadline.xlsx'
+
+results_df_ch.to_excel(df_ch, index=False)
+results_df_dl.to_excel(df_dl, index=False)
