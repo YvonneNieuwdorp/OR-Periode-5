@@ -4,6 +4,10 @@ import scipy.stats as sp
 import matplotlib.pyplot as plt
 import time
 import logging
+import random
+import math
+import matplotlib.patches as mpatches
+import pandas as pd
 
 Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
 Machines = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Machines')
@@ -82,6 +86,7 @@ def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available
             best_order = index
             best_machine = "M3"
     return best_order, best_machine
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
