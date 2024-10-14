@@ -2,35 +2,26 @@ import pandas as pd
 import numpy as np
 import scipy.stats as sp
 import matplotlib.pyplot as plt
-import random
-import matplotlib.patches as mpatches
-import time
 
+# Laad de gegevens
 Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
 Machines = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Machines')
 Setups = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Setups')
 
-current_time_m1 = 0
-current_time_m2 = 0
-current_time_m3 = 0
-scheduled_orders = []
-available_orders = Orders.copy()
-current_colour_m1 = None
-current_colour_m2 = None
-current_colour_m3 = None
-
+# Functie om processing time te berekenen
 def processing_time(ordernumber, number_of_machine):
     """ Functie die de processing time berekent
     Parameters: 
         - ordernummer, als een int
         - machine die gebruikt wordt, als een int
-    Output: de tijd die nodig is om de order uit te voeren/processingtime
+    Output: de tijd die nodig is om de order uit te voeren
     """
     return Orders.loc[ordernumber, 'Surface']/ Machines.loc[number_of_machine, 'Speed']
 
+# Functie om de setup time te berekenen
 def setup_time(prev_colour, new_colour):
-    """ geeft de setuptime aan
-    Parameters
+    """ Functie die de setuptime berekent
+    Parameters:
         - previous color als een string
         - new color als een string
     Output: setup_time
@@ -41,14 +32,8 @@ def setup_time(prev_colour, new_colour):
     else:
         return 0 
 
-def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2,current_colour_m3):
-    """ Berekent de oplossing die het dichtbij het meest optimaal is, gebaseerd op minimale kosten
-    Parameters
-        - current_time: huidige tijd
-        - available_order: orders die nog beschikbaar zijn, niet uitgevoerd
-        - current_colour: huidige kleur
-    Output: order die in huidige reeks het meest optimaal is
-    """
+## EERSTE SCHEMA: NEAREST NEIGHBOR
+def nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3):
     best_order = None
     best_machine = None
     min_cost = float('inf')
@@ -83,15 +68,24 @@ def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available
             best_machine = "M3"
     return best_order, best_machine
 
-# Lijst om iteratieresultaten op te slaan
-results = []
+# Lijst om iteratieresultaten op te slaan voor nearest neighbor
+results_nn = []
 
-# Scheduling loop for both machines
-while not available_orders.empty:
-    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
+# Herinitialiseren van tijden en kleuren voor de eerste planningsronde
+current_time_m1 = 0
+current_time_m2 = 0
+current_time_m3 = 0
+available_orders_nn = Orders.copy()
+current_colour_m1 = None
+current_colour_m2 = None
+current_colour_m3 = None
+
+# Scheduling loop voor nearest neighbor
+while not available_orders_nn.empty:
+    next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders_nn, current_colour_m1, current_colour_m2, current_colour_m3)
     
     if next_order_idx is not None:
-        next_order = available_orders.loc[next_order_idx]
+        next_order = available_orders_nn.loc[next_order_idx]
         
         # Bereken de starttijd, verwerkingstijd en setuptijd
         if best_machine == "M1":
@@ -122,7 +116,7 @@ while not available_orders.empty:
             current_colour_m3 = next_order["Colour"]
 
         # Voeg de huidige status van de planning toe aan de resultaten
-        results.append({
+        results_nn.append({
             "Order": next_order['Order'],
             "Machine": best_machine,
             "Start Time": start_time,
@@ -135,10 +129,11 @@ while not available_orders.empty:
         })
 
         # Verwijder de geplande order uit de beschikbare orders
-        available_orders.drop(next_order_idx, inplace=True)
+        available_orders_nn.drop(next_order_idx, inplace=True)
 
-results_df = pd.DataFrame(results)
-results_df = results_df.sort_values(by='Start Time')
+# Zet resultaten om in een DataFrame voor nearest neighbor
+results_df_nn = pd.DataFrame(results_nn)
+results_df_nn = results_df_nn.sort_values(by='Start Time')
 
 
 def total_schedule_cost(results_df):
@@ -195,6 +190,7 @@ def discrete_improving_search(results_df, iterations):
     """
     best_schedule = results_df.copy()
     best_cost = total_schedule_cost(best_schedule)
+    costs = []  # Lijst om kosten per iteratie op te slaan
     
     for i in range(iterations):
         # Generate a new schedule by either swapping orders or reassigning a machine
@@ -204,36 +200,52 @@ def discrete_improving_search(results_df, iterations):
             new_schedule = reassign_machine(best_schedule)
         
         # Recalculate the start times, finish times, lateness, and penalty costs
+        new_schedule = new_schedule.copy()  # Create a copy for the new schedule
+        current_time = {'M1': 0, 'M2': 0, 'M3': 0}  # Initialize current times for all machines
+        current_colours = {'M1': None, 'M2': None, 'M3': None}  # Initialize current colours for all machines
+        
         for idx, row in new_schedule.iterrows():
             order_idx = Orders[Orders['Order'] == row['Order']].index[0]
             machine_idx = {"M1": 0, "M2": 1, "M3": 2}[row["Machine"]]
-            setup = setup_time(new_schedule.iloc[idx-1]["Colour"] if idx > 0 else None, row["Colour"])
+            setup = setup_time(current_colours[row["Machine"]], row["Colour"])
             processing = processing_time(order_idx, machine_idx)
-            start_time = new_schedule.iloc[idx-1]["Finish Time"] if idx > 0 else 0 + setup
+            start_time = current_time[row["Machine"]] + setup
             finish_time = start_time + processing
-            lateness = max(0, finish_time - Orders.loc[order_idx, 'Deadline'])
-            penalty_cost = lateness * Orders.loc[order_idx, 'Penalty']
+            
+            # Update current time and colour for the machine
+            current_time[row["Machine"]] = finish_time
+            current_colours[row["Machine"]] = row["Colour"]
             
             # Update the dataframe with the new values
             new_schedule.at[idx, 'Start Time'] = start_time
             new_schedule.at[idx, 'Finish Time'] = finish_time
             new_schedule.at[idx, 'Setup Time'] = setup
             new_schedule.at[idx, 'Processing Time'] = processing
-            new_schedule.at[idx, 'Lateness'] = lateness
-            new_schedule.at[idx, 'Penalty Cost'] = penalty_cost
+            new_schedule.at[idx, 'Lateness'] = max(0, finish_time - Orders.loc[order_idx, 'Deadline'])
+            new_schedule.at[idx, 'Penalty Cost'] = new_schedule.at[idx, 'Lateness'] * Orders.loc[order_idx, 'Penalty']
         
         # Calculate the total cost of the new schedule
         new_cost = total_schedule_cost(new_schedule)
+        costs.append(new_cost)  # Voeg de kosten toe aan de lijst
         
         # If the new schedule is better, update the best schedule
         if new_cost < best_cost:
             best_schedule = new_schedule.copy()
             best_cost = new_cost
     
+    # Plot de kosten per iteratie
+    plt.figure(figsize=(10, 5))
+    plt.plot(range(iterations), costs, marker='o')
+    plt.title('Kosten over Iteraties')
+    plt.xlabel('Iteraties')
+    plt.ylabel('Totale Kosten')
+    plt.grid()
+    plt.show()
+
     return best_schedule
 
 start_time = time.time()  # Start tijd opnemen
-improved_schedule = discrete_improving_search(results_df, iterations=10000)
+improved_schedule = discrete_improving_search(results_df_nn, iterations=10000)
 end_time = time.time()  # Eindtijd opnemen
 
 print(f"Initial cost: {total_schedule_cost(results_df):.2f}")
@@ -287,12 +299,8 @@ def plot_gantt_chart(schedule_df):
 
     plt.show()
 
-# Voorbeeld aanroepen van de functie met de results_df DataFrame
-plot_gantt_chart(results_df)
-
 # Sla de verbeterde planning op in een Excel-bestand
-output_file = 'improved_schedule.xlsx'
+#output_file = 'improved_schedule.xlsx'
 #improved_schedule.to_excel(output_file, index=False)
-
+plot_gantt_chart(results_df_nn)
 plot_gantt_chart(improved_schedule)
-
