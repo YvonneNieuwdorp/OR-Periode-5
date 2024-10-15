@@ -1,31 +1,12 @@
 import pandas as pd
 import numpy as np
-import scipy.stats as sp
 import matplotlib.pyplot as plt
 import time
 import logging
 import random
 import math
 import matplotlib.patches as mpatches
-import pandas as pd
 
-Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
-Machines = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Machines')
-Setups = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Setups')
-schedule_best_costs = pd.read_excel('Schedule Constructive Heuristic Best Costs.xlsx')
-schedule_deadline = pd.read_excel('Schedule Constructive Heuristic Deadline.xlsx')
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import time
-import logging
-import random
-import math
-import matplotlib.patches as mpatches
-from itertools import cycle
-
-# Inladen van data
 Orders = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Orders')
 Machines = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Machines')
 Setups = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Setups')
@@ -37,26 +18,31 @@ random.seed(42)
 logger = logging.getLogger(name='sa-logger')
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', handlers=[logging.FileHandler("sa.log")])
 
-# Parameters voor simulated annealing
-initial_temperature = 10000000
-cooling_rate = 0.99995
-iterations_per_temperature = 100000
+# Parameters for simulated annealing
+initial_temperature = 100
+cooling_rate = 0.995
+iterations_per_temperature = 100
 
-# Verkrijg lijst van machines
+# Get list of machines dynamically from the 'Machines' DataFrame 
 machine_list = Machines['Machine'].tolist()
 
-# Functie om verwerkingstijd te berekenen
+#def processing_time(ordernumber, machine):
+    #return Orders.loc[ordernumber, 'Surface'] / Machines.loc[Machines['Machine'] == machine, 'Speed'].values[0]
+
 def processing_time(ordernumber, machine_idx):
+    """Bereken de verwerkingstijd op basis van de oppervlakte en snelheid van de machine."""
     machine_name = machine_names[machine_idx].strip()  # Verwijder eventuele spaties
     machine_row = Machines.loc[Machines['Machine'].str.strip() == machine_name]
 
     if machine_row.empty:
         print(f"Warning: Machine '{machine_name}' not found in Machines DataFrame.")
-        return float('inf')
+        print(f"Available machines in Machines DataFrame: {Machines['Machine'].tolist()}")
+        return float('inf')  # Return a large value to continue processing without crashing
 
     speed = machine_row['Speed'].values[0]
     surface = Orders.loc[ordernumber, 'Surface']
     return surface / speed
+
 
 def setup_time(prev_colour, new_colour):
     result = Setups.loc[(Setups['From colour'] == prev_colour) & (Setups['To colour'] == new_colour), 'Setup time']
@@ -88,20 +74,19 @@ def acceptance_probability(old_cost, new_cost, temperature):
         return np.exp((old_cost - new_cost) / temperature)
 
 # Extract machine names dynamically
-machine_names = Machines['Machine'].tolist()
+machine_names = Machines['Machine'].tolist()  # Assuming Machines DataFrame has a 'Machine' column listing machine names (e.g., 'M1', 'M2', 'M3', 'M4', ...)
 
 def simulated_annealing_search(results_df, iterations, initial_temperature, cooling_rate):
+    """Voer Simulated Annealing uit om het schema te optimaliseren."""
     best_schedule = results_df.copy()
     current_schedule = results_df.copy()
     best_cost = total_schedule_cost(best_schedule)
     current_cost = best_cost
     costs = []  # Voor het bijhouden van de kosten per iteratie
     temperature = initial_temperature
-    iteration_log = []  # Voor het bijhouden van iteratiedata
-    elapsed_time = 0  # Beginnen bij 0
 
     for i in range(iterations):
-        iter_start_time = time.time()  # Neem de tijd aan het begin van de iteratie
+        # Genereer een nieuwe planning door orders te wisselen of de machine opnieuw toe te wijzen
         if random.random() < 0.5:
             new_schedule = swap_orders(current_schedule)
         else:
@@ -115,17 +100,21 @@ def simulated_annealing_search(results_df, iterations, initial_temperature, cool
             order_idx = Orders[Orders['Order'] == row['Order']].index[0]
             machine = row["Machine"]
 
+            # Controleer of de huidige machine in de machine lijst staat
             if machine not in machine_names:
-                continue
+                continue  # Skip any invalid machine names (this shouldn't happen with correct data)
 
+            # Setup en processing tijd berekenen
             setup = setup_time(current_colours[machine], row["Colour"])
             processing = processing_time(order_idx, machine_names.index(machine))
             start_time = current_time[machine] + setup
             finish_time = start_time + processing
 
+            # Update huidige tijd en kleur voor de machine
             current_time[machine] = finish_time
             current_colours[machine] = row["Colour"]
 
+            # Vul de nieuwe planning in
             new_schedule.at[idx, 'Start Time'] = start_time
             new_schedule.at[idx, 'Finish Time'] = finish_time
             new_schedule.at[idx, 'Setup Time'] = setup
@@ -133,31 +122,22 @@ def simulated_annealing_search(results_df, iterations, initial_temperature, cool
             new_schedule.at[idx, 'Lateness'] = max(0, finish_time - Orders.loc[order_idx, 'Deadline'])
             new_schedule.at[idx, 'Penalty Cost'] = new_schedule.at[idx, 'Lateness'] * Orders.loc[order_idx, 'Penalty']
 
+        # Kosten van het nieuwe schema berekenen
         new_cost = total_schedule_cost(new_schedule)
         costs.append(new_cost)
-        iteration_log.append((i + 1, current_cost, best_cost, temperature))  # Log de huidige iteratie data
 
+        # Beslissen of de nieuwe oplossing geaccepteerd wordt
         if acceptance_probability(current_cost, new_cost, temperature) > random.random():
             current_schedule = new_schedule.copy()
             current_cost = new_cost
 
+            # Update beste oplossing indien nodig
             if new_cost < best_cost:
                 best_schedule = new_schedule.copy()
                 best_cost = new_cost
 
+        # Temperatuur verlagen
         temperature *= cooling_rate
-        
-        # Bereken de tijd die deze iteratie duurde en tel die op bij elapsed_time
-        iter_end_time = time.time()
-        iter_time = iter_end_time - iter_start_time
-        elapsed_time += iter_time
-
-        # Print de verstreken tijd en andere belangrijke informatie
-        print(f"Iteratie {i + 1}, Tijd: {elapsed_time:.2f} sec, Temperatuur: {temperature:.4f}, "
-              f"Huidige kosten: {current_cost:.2f}, Beste kosten: {best_cost:.2f}", end='\r')
-
-    # Print een regel om overlappende tekst te voorkomen
-    print(f"\nSimulated Annealing afgerond. Totale tijd: {elapsed_time:.2f} sec")
 
     # Plot kosten per iteratie
     plt.figure(figsize=(10, 5))
@@ -168,37 +148,28 @@ def simulated_annealing_search(results_df, iterations, initial_temperature, cool
     plt.grid()
     plt.show()
 
-    # Visualiseer iteratie log
-    plt.figure(figsize=(10, 5))
-    x = [ilog[0] for ilog in iteration_log]
-    y1 = [ilog[1] for ilog in iteration_log]
-    y2 = [ilog[2] for ilog in iteration_log]
-    y3 = [ilog[3] for ilog in iteration_log]
-    plt.plot(x, y1, label='Huidige Kosten', color='blue')
-    plt.plot(x, y2, label='Beste Kosten', color='orange')
-    plt.plot(x, y3, label='Temperatuur', color='red')
-    plt.xlabel('Iteratie')
-    plt.ylabel('Waarde')
-    plt.title('Iteratie Log van Simulated Annealing')
-    plt.legend()
-    plt.grid()
-    plt.show()
-
     return best_schedule
 
 # Voer het Simulated Annealing algoritme uit
 start_time = time.time()
-improved_schedule = simulated_annealing_search(schedule_best_costs, iterations_per_temperature, initial_temperature, cooling_rate)
+improved_schedule = simulated_annealing_search(schedule_deadline, iterations_per_temperature, initial_temperature, cooling_rate)
 end_time = time.time()
 
-print(f"Initial cost: {total_schedule_cost(schedule_best_costs):.2f}")
+print(f"Initial cost: {total_schedule_cost(schedule_deadline):.2f}")
 print(f"Improved cost: {total_schedule_cost(improved_schedule):.2f}")
 print(f"Time taken: {end_time - start_time:.2f} seconds")
 
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from itertools import cycle
+
 def plot_gantt_chart(schedule_df):
     fig, ax = plt.subplots(figsize=(12, 6))
+    # Begin met enkele vaste kleuren
     colours = {"Red": "red", "Blue": "blue", "Green": "green", "Yellow": "yellow", "Setup": "grey"}
-    default_colors = cycle(plt.cm.tab20.colors)
+    
+    # Voor nieuwe kleuren gebruiken we een iterator over de ingebouwde kleuren in matplotlib
+    default_colors = cycle(plt.cm.tab20.colors)  # tab20 heeft 20 kleuren die herhaald kunnen worden
 
     machine_idxs = {machine: idx for idx, machine in enumerate(schedule_df["Machine"].unique())}
     
@@ -210,23 +181,26 @@ def plot_gantt_chart(schedule_df):
         order_colour = row["Colour"]
         order_name = row["Order"]
 
+        # Controleer of de kleur al in de dictionary zit; voeg zo nodig een nieuwe kleur toe
         if order_colour not in colours:
             colours[order_colour] = next(default_colors)
 
+        # Teken setup tijd als grijs balkje
         ax.barh(machine_idxs[machine], setup_duration, left=start, color=colours["Setup"], edgecolor='black')
+        # Teken processing tijd in de toegekende kleur
         ax.barh(machine_idxs[machine], processing_duration, left=start + setup_duration, color=colours[order_colour], edgecolor='black')
+        # Voeg de ordernaam toe aan de bar
         ax.text(start + setup_duration + (processing_duration / 2), machine_idxs[machine], order_name, va='center', ha='center', color='white', fontsize=10)
 
+    # Zet y-as labels en titel
     ax.set_yticks(list(machine_idxs.values()))
     ax.set_yticklabels(machine_idxs.keys())
     ax.set_xlabel("Time")
     ax.set_ylabel("Machines")
     ax.set_title("Gantt Chart of Order Scheduling with Setup and Processing Times")
 
+    # Maak een legenda van alle kleuren
     legend_patches = [mpatches.Patch(color=col, label=label) for label, col in colours.items()]
     ax.legend(handles=legend_patches, title="Order Colours and Setup Time")
 
     plt.show()
-
-# Plot de Gantt-grafiek voor de verbeterde planning
-plot_gantt_chart(improved_schedule)
