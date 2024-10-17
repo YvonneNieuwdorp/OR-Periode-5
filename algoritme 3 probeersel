@@ -13,278 +13,210 @@ Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
 Machines = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Machines')
 Setups = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Setups')
 
-current_time_m1 = 0
-current_time_m2 = 0
-current_time_m3 = 0
-scheduled_orders = []
-available_orders = Orders.copy()
-current_colour_m1 = None
-current_colour_m2 = None
-current_colour_m3 = None
+import random
+import math
+import matplotlib.pyplot as plt # (from my Discrete Improving Search code)
+import logging
+import time  
 
-def processing_time(ordernumber, number_of_machine):
-    """ Functie die de processing time berekent
-    Parameters: 
-        - ordernummer, als een int
-        - machine die gebruikt wordt, als een int
-    Output: de tijd die nodig is om de order uit te voeren/processingtime
+VERYBIGNUMBER = 424242424242
+NUMLOCATIONS = 25
+
+random.seed(42)                     
+logger = logging.getLogger(name='sa-logger')
+logging.basicConfig(level=logging.INFO,
+                    format='[%(asctime)s] %(message)s',
+                    handlers=[logging.FileHandler("sa.log")])
+
+# Parameters for simulated annealing
+initial_temperature = 100
+cooling_rate = 0.995
+iterations_per_temperature = 1000
+
+def euclidean_distance(point1, point2):
     """
-    return Orders.loc[ordernumber, 'Surface']/ Machines.loc[number_of_machine, 'Speed']
-
-def setup_time(prev_colour, new_colour):
-    """ geeft de setuptime aan
-    Parameters
-        - previous color als een string
-        - new color als een string
-    Output: setup_time
+        Euclidean distance between two points (from my Discrete Improving Search code)
+        
+        Arguments:
+            point1, point2: (x,y)-coordinates of two points
+            
+        Returns:
+            shortest distance from point1 to point2 'as the crow flies' 
     """
-    result = Setups.loc[(Setups['From colour'] == prev_colour) & (Setups['To colour'] == new_colour), 'Setup time']
-    if not result.empty:
-        return result.values[0]
-    else:
-        return 0 
+    x1, y1 = point1
+    x2, y2 = point2
+    return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
 
-def nearest_neighbor(current_time_m1, current_time_m2,current_time_m3, available_orders, current_colour_m1, current_colour_m2,current_colour_m3):
-    """ Berekent de oplossing die het dichtbij het meest optimaal is, gebaseerd op minimale kosten
-    Parameters
-        - current_time: huidige tijd
-        - available_order: orders die nog beschikbaar zijn, niet uitgevoerd
-        - current_colour: huidige kleur
-    Output: order en mashine die in huidige reeks het meest optimaal is
+def total_distance(locations, tour):
     """
-    best_order = None
-    best_machine = None
-    min_cost = float('inf')
+        Calculates the total distance of a tour along all locations (from my Discrete Improving Search code)
+        Replaces ChatGPT's tour_distance function
 
-    for index, order in available_orders.iterrows(): # bekijkt alle orders en geeft daar een index en order uit.
-        time_to_finish_m1 = current_time_m1 + processing_time(index, 0) 
-        lateness_m1 = max(0, time_to_finish_m1 - order['Deadline']) #
-        cost_m1 = lateness_m1 * order['Penalty']
-        cost_m1 += setup_time(current_colour_m1, order["Colour"]) if current_colour_m1 else 0
+        Arguments:
+            set of locations ({0,1,...,num_locations-1})
+            tour (list): a permutation of the set of locations
 
-        time_to_finish_m2 = current_time_m2 + processing_time(index, 1)
-        lateness_m2 = max(0, time_to_finish_m2 - order['Deadline'])
-        cost_m2 = lateness_m2 * order['Penalty']
-        cost_m2 += setup_time(current_colour_m2, order["Colour"]) if current_colour_m2 else 0
-
-        time_to_finish_m3 = current_time_m3 + processing_time(index, 2)
-        lateness_m3 = max(0, time_to_finish_m3 - order['Deadline'])
-        cost_m3 = lateness_m3 * order['Penalty']
-        cost_m3 += setup_time(current_colour_m3, order["Colour"]) if current_colour_m3 else 0
-        
-        # Update best order and machine based on the minimum cost found
-        if cost_m1 < min_cost:
-            min_cost = cost_m1
-            best_order = index
-            best_machine = "M1"
-        if cost_m2 < min_cost:
-            min_cost = cost_m2
-            best_order = index
-            best_machine = "M2"
-        if cost_m3 < min_cost:
-            min_cost = cost_m3
-            best_order = index
-            best_machine = "M3"
-    return best_order, best_machine
-
-
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Variabelen voor tabu search
-tabu_list = []
-tabu_size = 7
-best_solution = None
-best_cost = [100000000]
-current_cost_list =[]
-total_cost_algorithm = current_cost_list.sum()
-
-# Aantal iteraties
-Aantal_iteraties = 100
-
-# Lijst om resultaten van alle orders bij te houden
-results = []
-
-# lijn van code verslechtering toelaat.
-
-# Start de tijdmeting
-start_time = time.time()
-
-# Hoofdloop voor iteraties buuroplossing
-try:
-    for iteration in range(Aantal_iteraties): 
-        logging.info(f"Iteratie {iteration + 1} van {Aantal_iteraties}")
-        
-        # Nearest neighbor keuze voor de volgende order
-        next_order_idx, best_machine = nearest_neighbor(current_time_m1, current_time_m2, current_time_m3, available_orders, current_colour_m1, current_colour_m2, current_colour_m3)
-        
-        if next_order_idx in tabu_list:
-            logging.info(f"Order {next_order_idx} is tabu, overslaan...")
-            continue  # sla over als deze oplossing tabu is
-        
-        if next_order_idx is not None:
-            next_order = available_orders.loc[next_order_idx]
-
-            # Probeer de verwerking voor de gekozen machine
-            try:
-                if best_machine == "M1":
-                    setup = setup_time(current_colour_m1, next_order["Colour"])
-                    processing = processing_time(next_order_idx, 0)
-                    start_time_order = current_time_m1 + setup
-                    finish_time = start_time_order + processing
-                    lateness = max(0, finish_time - next_order['Deadline'])
-                    current_time_m1 = finish_time
-                    current_colour_m1 = next_order["Colour"]
-
-                elif best_machine == "M2":
-                    setup = setup_time(current_colour_m2, next_order["Colour"])
-                    processing = processing_time(next_order_idx, 1)
-                    start_time_order = current_time_m2 + setup
-                    finish_time = start_time_order + processing
-                    lateness = max(0, finish_time - next_order['Deadline'])
-                    current_time_m2 = finish_time
-                    current_colour_m2 = next_order["Colour"]
-
-                else:  # best_machine == "M3":
-                    setup = setup_time(current_colour_m3, next_order["Colour"])
-                    processing = processing_time(next_order_idx, 2)
-                    start_time_order = current_time_m3 + setup
-                    finish_time = start_time_order + processing
-                    lateness = max(0, finish_time - next_order['Deadline'])
-                    current_time_m3 = finish_time
-                    current_colour_m3 = next_order["Colour"]
-
-                # Bereken de kosten voor de huidige oplossing
-                current_cost = lateness * next_order['Penalty']
-                current_cost_list.append(current_cost)
-
-                # Voeg de huidige status van de planning toe aan de resultaten
-                results.append({
-                    "Order": next_order['Order'],
-                    "Machine": best_machine,
-                    "Start Time": start_time_order,
-                    "Finish Time": finish_time,
-                    "Colour": next_order['Colour'],
-                    "Setup Time": setup,
-                    "Processing Time": processing,
-                    "Lateness": lateness,
-                    "Penalty Cost": current_cost
-                })
-
-                # Verwijder de geplande order uit de beschikbare orders
-                available_orders.drop(next_order_idx, inplace=True)
-
-                # Voeg de oplossing toe aan de tabu-lijst
-                tabu_list.append(next_order_idx)
-
-                # Beperk de grootte van de tabu-lijst
-                if len(tabu_list) > tabu_size:
-                    tabu_list.pop(0)
-
-            except Exception as e:
-                logging.error(f"Fout tijdens verwerken van order {next_order_idx}: {str(e)}")
-                raise
-
-except Exception as e:
-    logging.error(f"Algoritme gestopt vanwege een fout: {str(e)}")
-
-if total_cost_algorithm < best_cost:
-    best_cost.pop(0)
-    best_cost.append(current_cost)
-
-# Controleer of de huidige oplossing slechter is dan de beste gevonden kosten
-if total_cost_algorithm > best_cost:
-    logging.info(f"Slechtere oplossing geaccepteerd met kosten: {current_cost}, terwijl de beste kosten {best_cost} zijn.")
-
-# Eindtijd en duur berekenen
-end_time = time.time()
-elapsed_time = end_time - start_time
-logging.info(f"Het algoritme duurde {elapsed_time:.2f} seconden om te runnen.")
-
-# Print de beste oplossing en de looptijd
-print("total cost algorithm:",total_cost_algorithm)
-print("Beste kosten:", best_cost)
-print(f"Het algoritme heeft {elapsed_time:.2f} seconden geduurd.")
-
-# Converteer de lijst met resultaten naar een DataFrame
-results_df = pd.DataFrame(results)
-
-# Bereken de totale penalty costs
-total_penalty_cost = results_df['Penalty Cost'].sum()
-print("Totale Penalty Cost:", total_penalty_cost)
-
-# Print de DataFrame met de resultaten
-print("Resultaten van de orders:")
-print(results_df)
-
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import pandas as pd
-
-def plot_gantt_chart(schedule_df):
-    """Visualize the scheduling process using a Gantt chart with setup and processing times indicated separately.
-    
-    Parameters:
-        schedule_df: DataFrame with columns 'Machine', 'Order', 'Start Time', 'Finish Time', 'Colour', 'Setup Time', and 'Processing Time'.
+        Returns:
+            sum of all distances between two consecutive locations in tour 
     """
-    fig, ax = plt.subplots(figsize=(12, 6))
-    colours = {
-        "Red": "red",
-        "Blue": "blue",
-        "Green": "green",
-        "Yellow": "yellow",
-        "Setup": "grey"  # Color for setup time
-    }
+    totalDistance = 0
+    for i in range(len(tour)):
+        fromLocation = locations[tour[i]]
+        toLocation = locations[tour[(i + 1) % len(tour)]]
+        totalDistance += euclidean_distance(fromLocation, toLocation)
 
-    for idx, row in schedule_df.iterrows():
-        machine = row["Machine"]
-        start = row["Start Time"]
-        setup_duration = row["Setup Time"]
-        processing_duration = row["Processing Time"]
-        order_colour = row["Colour"]
-        order_name = row["Order"]
+    return totalDistance
 
-        # Index voor de machine-positie
-        machine_idx = {"M1": 0, "M2": 1, "M3": 2}[machine]
+def random_tour(locations):
+    """
+        Generates a tour visiting all locations at random
 
-        # Setup time bar
-        ax.barh(machine_idx, setup_duration, left=start, color=colours["Setup"], edgecolor='black')
-        
-        # Processing time bar
-        ax.barh(machine_idx, processing_duration, left=start + setup_duration, color=colours[order_colour], edgecolor='black')
-        
-        # Label in the center of the processing time
-        ax.text(start + setup_duration + (processing_duration / 2), machine_idx, order_name, va='center', ha='center', color='white', fontsize=10)
+        Arguments:
+            set of locations ({0,1,...,num_locations-1})
 
-         # Label in the center of the processing time
-        ax.text(start + (processing_duration / 2), machine_idx, order_name, va='center', ha='center', color='white', fontsize=10)
+        Returns:
+            (list) a permutation of the set of locations        
+    """
+    num_locations = len(locations)
+    rnd_tour = random.sample(range(num_locations), num_locations)
 
-    ax.set_yticks([0, 1, 2])
-    ax.set_yticklabels(["M1", "M2", "M3"])
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Machines")
-    ax.set_title("Gantt Chart of Order Scheduling with Setup and Processing Times")
+    total_distance_rnd_tour = total_distance(locations, rnd_tour)
+    logger.info(msg=f"RND tour has distance {total_distance_rnd_tour:.2f}")    
 
-    # Legend for order colors and setup time
-    legend_patches = [mpatches.Patch(color=col, label=label) for label, col in colours.items()]
-    ax.legend(handles=legend_patches, title="Order Colours and Setup Time")
+    return rnd_tour
 
+# Simulated annealing function
+def simulated_annealing(locations, tour, temperature, cooling_rate, iterations_per_temp):
+    iteration_log = []
+    start_time = time.time()
+
+    current_tour = tour
+    best_tour = tour
+    current_distance = total_distance(locations, current_tour)
+    best_distance = current_distance
+    iteration = 0
+    log_record = (iteration,current_distance,best_distance,temperature)
+    iteration_log.append(log_record)
+
+    while temperature > 1e-3:
+        for _ in range(iterations_per_temp):
+            # Generate a neighboring solution by swapping two random cities
+            i, j = random.sample(range(len(tour)), 2)
+            neighbor_tour = current_tour[:]
+            neighbor_tour[i], neighbor_tour[j] = neighbor_tour[j], neighbor_tour[i]
+            neighbor_distance = total_distance(locations, neighbor_tour)
+
+            logger.debug(msg=f"Swap locations {i} and {j} in current tour gives tour with length {neighbor_distance:6.2f}")    
+            # Decide whether to accept the neighbor solution
+            delta = neighbor_distance - current_distance
+            if delta < 0 or random.random() < math.exp(-delta / temperature):
+                current_tour = neighbor_tour
+                current_distance = neighbor_distance
+                logger.debug(msg=f"Move has gain {delta:6.2f}, is accepted")
+
+                # Update the best solution if necessary
+                if current_distance < best_distance:
+                    best_tour = current_tour
+                    best_distance = current_distance
+                    logger.debug(msg=f"Best solution is updated")
+
+                print(f"Temperature {temperature:8.4f}, current distance {current_distance:6.2f}, best distance {best_distance:6.2f}", end='\r')
+
+            log_record = (iteration+1,current_distance,best_distance,temperature)
+            iteration_log.append(log_record)
+            iteration += 1
+
+        # Cool the temperature
+        temperature *= cooling_rate
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print("\n")
+    print(f"Elapsed time: {elapsed_time:.2f}")
+
+    # visualize iteration log
+    plt.figure(0)
+    x = [ilog[0] for ilog in iteration_log]
+    y1 = [ilog[1] for ilog in iteration_log]
+    y2 = [ilog[2] for ilog in iteration_log]
+    y3 = [ilog[3] for ilog in iteration_log]
+
+    plt.plot(x, y1)
+    plt.plot(x, y2)
+    plt.plot(x, y3)
+    plt.xlabel('Iteration')
+    plt.ylabel('Distance')
+    plt.title(f'Progress of SA heuristic applied to {len(tour)} nodes')    
+
+    return best_tour, best_distance
+
+def main():
+    # Generate random instance in [0,100]x[0,100]
+    # ----------
+    num_locations = NUMLOCATIONS
+    coordinates = []
+    distance = {}
+    for i in range(num_locations):
+        x = random.uniform(0,100)
+        y = random.uniform(0,100)
+        coordinates.append((x,y))
+
+    for p1 in range(num_locations):
+        for p2 in range(num_locations):
+            point1 = coordinates[p1]
+            point2 = coordinates[p2]
+            dist = euclidean_distance(point1,point2)
+            keyToRetrieve = (point1,point2)
+            distance[keyToRetrieve] = dist
+
+    logger.info(msg=f"Random instance with {num_locations} locations")    
+
+    # Generate a tour at random
+    # ----------
+    rnd_tour = random_tour(coordinates)
+    total_distance_rnd_tour = total_distance(coordinates,rnd_tour)
+
+    # Call the simulated annealing function
+    best_tour, best_distance = simulated_annealing(coordinates, rnd_tour, initial_temperature, cooling_rate, iterations_per_temperature)
+
+    # Print the results
+    print("\n")
+    print("Best Tour:", best_tour)
+    print("Best Distance:", best_distance)
+
+
+    # Plot the random solution and the discrete improving search solution 
+    # (from my Discrete Improving Search code)
+    # ---
+
+    # Separate the x and y values into separate lists
+    x = [coord[0] for coord in coordinates]
+    y = [coord[1] for coord in coordinates]
+
+    # In Figure 1, we show both the random solution and the NN solution
+    plt.figure(1)
+    plt.scatter(x, y)
+    plt.xlabel('X-axis Label')
+    plt.ylabel('Y-axis Label')
+
+    for i in range(1, len(coordinates)):
+        x1, y1 = coordinates[best_tour[i - 1]]
+        x2, y2 = coordinates[best_tour[i]]
+        plt.plot([x1, x2], [y1, y2], 'b-')  
+    x1, y1 = coordinates[best_tour[len(coordinates)-1]]
+    x2, y2 = coordinates[best_tour[0]]
+    plt.plot([x1, x2], [y1, y2], 'b-')  
+
+    for i in range(1, len(coordinates)):
+        x1, y1 = coordinates[rnd_tour[i - 1]]
+        x2, y2 = coordinates[rnd_tour[i]]
+        plt.plot([x1, x2], [y1, y2], '--', color='grey', linewidth=0.8)  
+    x1, y1 = coordinates[rnd_tour[len(coordinates)-1]]
+    x2, y2 = coordinates[rnd_tour[0]]
+    plt.plot([x1, x2], [y1, y2], '--', color='grey', linewidth=0.8)  
+
+    plt.title(f'Solutions on {len(coordinates)} nodes; RND tour: {total_distance_rnd_tour:.2f}, SA tour: {best_distance:.2f}')
     plt.show()
 
-# Voorbeeld aanroepen van de functie met de results_df DataFrame
-plot_gantt_chart(results_df)
-
-# Exporteer resultaten naar een Excel-bestand
-output_filename = 'algoritme_resultaten_goed.xlsx'
-with pd.ExcelWriter(output_filename) as writer:
-    # Schrijf het resultaat van alle orders naar een werkblad
-    results_df.to_excel(writer, sheet_name='Orders_Resultaten', index=False)
-    
-    
-# Bevestiging van het opslaan van het bestand
-#print(f"Resultaten zijn opgeslagen in '{output_filename}'")
-
-# een betere oplossingruimte:
-# bij op-4 kan je alleen maar 4 orders op de zelfde machine omdraaien en 4 orders op verschillende machines omdraaien
-# Dus we kunnen met ook zo maken dat een order naar een maschine kan gaan zonder dat er gewisseld hoeft te worden.
-# 
+if __name__ == "__main__":
+    main()
