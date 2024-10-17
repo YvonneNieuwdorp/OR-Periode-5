@@ -2,13 +2,40 @@ import pandas as pd
 import numpy as np
 import scipy.stats as sp
 import matplotlib.pyplot as plt
-import random
 import matplotlib.patches as mpatches
 import time
+import random
 
-schedule_best_costs = pd.read_excel('Schedule Constructive Heuristic Best Costs')
-schedule_deadline = pd.read_excel('Schedule Constructive Heuristic Deadline')
+Orders = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Orders')
+Machines = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Machines')
+Setups = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Setups')
 
+schedule_best_costs = pd.read_excel('Schedule Constructive Heuristic Best Costs.xlsx')
+schedule_deadline = pd.read_excel('Schedule Constructive Heuristic Deadline.xlsx')
+
+def processing_time(ordernumber, number_of_machine):
+    """ Functie die de processing time berekent
+    Parameters: 
+        - ordernummer, als een int
+        - machine die gebruikt wordt, als een int
+    Output: de tijd die nodig is om de order uit te voeren
+    """
+    return Orders.loc[ordernumber, 'Surface'] / Machines.loc[number_of_machine, 'Speed']
+
+# Functie om de setup time te berekenen
+def setup_time(prev_colour, new_colour):
+    """ Functie die de setuptime berekent
+    Parameters:
+        - previous color als een string
+        - new color als een string
+    Output: setup_time
+    """
+    result = Setups.loc[(Setups['From colour'] == prev_colour) & (Setups['To colour'] == new_colour), 'Setup time']
+    if not result.empty:
+        return result.values[0]
+    else:
+        return 0 
+        
 def total_schedule_cost(results_df):
     """ Berekent de totale kosten van de schedule
     Parameters:
@@ -74,12 +101,12 @@ def discrete_improving_search(results_df, iterations):
         
         # Recalculate the start times, finish times, lateness, and penalty costs
         new_schedule = new_schedule.copy()  # Create a copy for the new schedule
-        current_time = {'M1': 0, 'M2': 0, 'M3': 0}  # Initialize current times for all machines
-        current_colours = {'M1': None, 'M2': None, 'M3': None}  # Initialize current colours for all machines
+        current_time = {'M1': 0, 'M2': 0, 'M3': 0, 'M4': 0}  # Initialize current times for all machines
+        current_colours = {'M1': None, 'M2': None, 'M3': None, 'M4': None} # Initialize current colours for all machines
         
         for idx, row in new_schedule.iterrows():
             order_idx = Orders[Orders['Order'] == row['Order']].index[0]
-            machine_idx = {"M1": 0, "M2": 1, "M3": 2}[row["Machine"]]
+            machine_idx = {"M1": 0, "M2": 1, "M3": 2, "M4": 3}[row["Machine"]]
             setup = setup_time(current_colours[row["Machine"]], row["Colour"])
             processing = processing_time(order_idx, machine_idx)
             start_time = current_time[row["Machine"]] + setup
@@ -117,19 +144,12 @@ def discrete_improving_search(results_df, iterations):
 
     return best_schedule
 
-start_time = time.time()  # Start tijd opnemen
-improved_schedule = discrete_improving_search(results_df_nn, iterations=10000)
-end_time = time.time()  # Eindtijd opnemen
-
-print(f"Initial cost: {total_schedule_cost(results_df_nn):.2f}")
-print(f"Improved cost: {total_schedule_cost(improved_schedule):.2f}")
-print(f"Time taken: {end_time - start_time:.2f} seconds")  # Tijd berekenen en printen
-
 def plot_gantt_chart(schedule_df):
     """Visualize the scheduling process using a Gantt chart with setup and processing times indicated separately.
     
     Parameters:
         schedule_df: DataFrame with columns 'Machine', 'Order', 'Start Time', 'Finish Time', 'Colour', 'Setup Time', and 'Processing Time'.
+    Output: Gantt chart
     """
     fig, ax = plt.subplots(figsize=(12, 6))
     colours = {
@@ -137,7 +157,8 @@ def plot_gantt_chart(schedule_df):
         "Blue": "blue",
         "Green": "green",
         "Yellow": "yellow",
-        "Setup": "grey"  # Color for setup time
+        "Purple": "purple",
+        "Setup": "grey"
     }
 
     for idx, row in schedule_df.iterrows():
@@ -149,7 +170,7 @@ def plot_gantt_chart(schedule_df):
         order_name = row["Order"]
 
         # Index voor de machine-positie
-        machine_idx = {"M1": 0, "M2": 1, "M3": 2}[machine]
+        machine_idx = {"M1": 0, "M2": 1, "M3": 2, "M4":3}[machine]
 
         # Setup time bar
         ax.barh(machine_idx, setup_duration, left=start, color=colours["Setup"], edgecolor='black')
@@ -160,8 +181,8 @@ def plot_gantt_chart(schedule_df):
         # Label in the center of the processing time
         ax.text(start + setup_duration + (processing_duration / 2), machine_idx, order_name, va='center', ha='center', color='white', fontsize=10)
 
-    ax.set_yticks([0, 1, 2])
-    ax.set_yticklabels(["M1", "M2", "M3"])
+    ax.set_yticks([0, 1, 2, 3])
+    ax.set_yticklabels(["M1", "M2", "M3", "4"])
     ax.set_xlabel("Time")
     ax.set_ylabel("Machines")
     ax.set_title("Gantt Chart of Order Scheduling with Setup and Processing Times")
@@ -172,8 +193,13 @@ def plot_gantt_chart(schedule_df):
 
     plt.show()
 
-# Sla de verbeterde planning op in een Excel-bestand
-#output_file = 'improved_schedule.xlsx'
-#improved_schedule.to_excel(output_file, index=False)
-plot_gantt_chart(results_df_nn)
+start_time = time.time()  # Start tijd opnemen
+improved_schedule = discrete_improving_search(schedule_best_costs, iterations=100)
+end_time = time.time()  # Eindtijd opnemen
+
+print(f"Initial cost: {total_schedule_cost(schedule_best_costs):.2f}")
+print(f"Improved cost: {total_schedule_cost(improved_schedule):.2f}")
+print(f"Time taken: {end_time - start_time:.2f} seconds")  # Tijd berekenen en printen
+
+plot_gantt_chart(schedule_best_costs)
 plot_gantt_chart(improved_schedule)
