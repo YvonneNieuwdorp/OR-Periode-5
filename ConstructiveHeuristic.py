@@ -60,7 +60,7 @@ current_times = [0] * 4
 available_orders_ch = Orders.copy()
 current_colours = [None] * 4
 
-# Scheduling loop voor nearest neighbor
+# Scheduling loop 
 while not available_orders_ch.empty:
     next_order_idx, best_machine = constructive_heuristic_best_costs(current_times, available_orders_ch, current_colours)
     
