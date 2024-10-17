@@ -8,24 +8,9 @@ import random
 import math
 import matplotlib.patches as mpatches
 import pandas as pd
-
-Orders = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Orders')
-Machines = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Machines')
-Setups = pd.read_excel('PaintShop - September 2024.xlsx', sheet_name='Setups')
-schedule_best_costs = pd.read_excel('Schedule Constructive Heuristic Best Costs.xlsx')
-schedule_deadline = pd.read_excel('Schedule Constructive Heuristic Deadline.xlsx')
-
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-import time
-import logging
-import random
-import math
-import matplotlib.patches as mpatches
 from itertools import cycle
 
-# Inladen van data
 Orders = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Orders')
 Machines = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Machines')
 Setups = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Setups')
@@ -38,9 +23,9 @@ logger = logging.getLogger(name='sa-logger')
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', handlers=[logging.FileHandler("sa.log")])
 
 # Parameters voor simulated annealing
-initial_temperature = 100000000
-cooling_rate = 0.9997
-iterations_per_temperature = 100000
+initial_temperature = 1000
+cooling_rate = 0.9
+iterations_per_temperature = 100
 
 # Verkrijg lijst van machines
 machine_list = Machines['Machine'].tolist()
@@ -195,34 +180,58 @@ print(f"Initial cost: {total_schedule_cost(schedule_deadline):.2f}")
 print(f"Improved cost: {total_schedule_cost(improved_schedule):.2f}")
 print(f"Time taken: {end_time - start_time:.2f} seconds")
 
-def plot_gantt_chart(schedule_df):
+# Export the best schedule to an Excel file
+output_file = "Best_Schedule.xlsx"
+improved_schedule.to_excel(output_file, index=False)
+print(f"Best schedule exported to '{output_file}'")
+
+def plot_gantt_chart(schedule_df): 
     fig, ax = plt.subplots(figsize=(12, 6))
     colours = {"Red": "red", "Blue": "blue", "Green": "green", "Yellow": "yellow", "Setup": "grey"}
     default_colors = cycle(plt.cm.tab20.colors)
 
     machine_idxs = {machine: idx for idx, machine in enumerate(schedule_df["Machine"].unique())}
-    
+    prev_finish_time = {}  # Dictionary to store the finish time of the previous order on each machine
+
     for idx, row in schedule_df.iterrows():
         machine = row["Machine"]
-        start = row["Start Time"]
         setup_duration = row["Setup Time"]
         processing_duration = row["Processing Time"]
         order_colour = row["Colour"]
         order_name = row["Order"]
 
+        # Determine start time based on the previous finish time on the same machine
+        start = prev_finish_time.get(machine, row["Start Time"])  # Default to current start time if no previous order
+        
+        # Calculate finish time for the current order
+        finish_time = start + setup_duration + processing_duration
+        
+        # Update finish time for the next order on the same machine
+        prev_finish_time[machine] = finish_time
+
+        # Assign colors for the bars
         if order_colour not in colours:
             colours[order_colour] = next(default_colors)
 
+        # Plot the setup and processing times
         ax.barh(machine_idxs[machine], setup_duration, left=start, color=colours["Setup"], edgecolor='black')
         ax.barh(machine_idxs[machine], processing_duration, left=start + setup_duration, color=colours[order_colour], edgecolor='black')
-        ax.text(start + setup_duration + (processing_duration / 2), machine_idxs[machine], order_name, va='center', ha='center', color='white', fontsize=10)
+        
+        # Determine text color based on the order colour
+        text_color = 'black' if order_colour == "Yellow" else 'white'
+        
+        # Add order label at the center of the processing time bar
+        ax.text(start + setup_duration + (processing_duration / 2), machine_idxs[machine], order_name, 
+                va='center', ha='center', color=text_color, fontsize=10)
 
+    # Configure plot
     ax.set_yticks(list(machine_idxs.values()))
     ax.set_yticklabels(machine_idxs.keys())
     ax.set_xlabel("Time")
     ax.set_ylabel("Machines")
     ax.set_title("Gantt Chart of Order Scheduling with Setup and Processing Times")
 
+    # Add legend
     legend_patches = [mpatches.Patch(color=col, label=label) for label, col in colours.items()]
     ax.legend(handles=legend_patches, title="Order Colours and Setup Time")
 
