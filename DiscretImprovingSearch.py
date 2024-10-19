@@ -1,57 +1,34 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import time
+
+# Laad de gegevens
+Orders = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Orders')
+Machines = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Machines')
+Setups = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Setups')
+schedule_best_costs = pd.read_excel("Schedule Constructive Heuristic Best Costs.xlsx")
+schedule_deadline = pd.read_excel("Schedule Constructive Heuristic Deadline.xlsx")
+
 
 def processing_time(ordernumber, number_of_machine):
-    """ Functie die de processing time berekent
-    Parameters: 
-        - ordernummer, als een int
-        - machine die gebruikt wordt, als een int
-    Output: de tijd die nodig is om de order uit te voeren
+    """Berekent processing time
+    Parameters: ordernumber (int) en number_of_machine (int)
+    output: processing time (int)
     """
     return Orders.loc[ordernumber, 'Surface'] / Machines.loc[number_of_machine, 'Speed']
 
-# Functie om de setup time te berekenen
 def setup_time(prev_colour, new_colour):
-    """ Functie die de setuptime berekent
-    Parameters:
-        - previous color als een string
-        - new color als een string
-    Output: setup_time
+    """Berekent setup time
+    Parameters: previous colour (str) en new_colour (str)
+    output: setup time (int)
     """
     result = Setups.loc[(Setups['From colour'] == prev_colour) & (Setups['To colour'] == new_colour), 'Setup time']
     if not result.empty:
         return result.values[0]
     else:
         return 0 
-
-def processing_time(ordernumber, number_of_machine):
-    """Functie die de processing time berekent.
-    
-    Parameters: 
-        ordernummer: als een int
-        machine die gebruikt wordt: als een int
-    
-    Output: 
-        De tijd die nodig is om de order uit te voeren.
-    """
-    return Orders.loc[ordernumber, 'Surface'] / Machines.loc[number_of_machine, 'Speed']
-
-def setup_time(prev_colour, new_colour):
-    """Functie die de setuptime berekent.
-    
-    Parameters:
-        previous color: als een string
-        new color: als een string
-        
-    Output: 
-        setup_time
-    """
-    result = Setups.loc[(Setups['From colour'] == prev_colour) & (Setups['To colour'] == new_colour), 'Setup time']
-    if not result.empty:
-        return result.values[0]
-    else:
-        return 0
 
 def total_schedule_cost(new_schedule):
     """Berekent de totale kosten van de nieuwe planning en update het schema.
@@ -100,68 +77,40 @@ def total_schedule_cost(new_schedule):
 
     return total_penalty_cost
 
-
-def discrete_improvement_search(initial_schedule):
-    """Implements a discrete improvement search algorithm to optimize the schedule.
-    
-    Parameters:
-        initial_schedule: DataFrame with initial scheduling information.
-        
-    Returns:
-        best_schedule: DataFrame with the local optimum schedule.
-        costs: list of total costs for each iteration
+def two_opt(schedule_df):
+    """Voert Discrete Improving Search uit
+    Parameters: schedule_df (DataFrame)
+    Output: 
+        - schedule_df: DataFrame, improved schedule
+        - costs_history: list, costs per DataFrame per iterations
     """
-    # initialiseren van huidig schema
-    num_orders = len(initial_schedule)
-    curr_schedule = initial_schedule.copy()  # Maak een kopie van het oorspronkelijke schema
-    total_costs = total_schedule_cost(curr_schedule)  # Initieel totale kosten
-    iterations = 0
+    improved = True
+    costs_history = []  # Lijst om de kosten van elke iteratie op te slaan
     
-    while True:
-        # bepalen improvement en gain
-        max_gain = float('-inf')  # Start met een zeer negatieve gain
-        fi_move_found = False
-        move = None  # Houdt de best move bij
-        
-        for i in range(1, num_orders - 1):  # van i = 1 t/m num_orders -2
-            for j in range(i + 2, num_orders + 1):  # van j = i+2 t/m num_orders
-                if (i == 1 and j == num_orders): 
-                    break
+    while improved:
+        improved = False
+        # Loop over alle mogelijke combinaties van orders
+        for i in range(len(schedule_df) - 1):
+            for j in range(i + 1, len(schedule_df)):
                 
-                # Bereken de indices voor de orders
-                order_i = curr_schedule['Order'][i]
-                order_j = curr_schedule['Order'][j - 1] if j < num_orders else curr_schedule['Order'][0]
+                new_schedule_df = schedule_df.copy()
+                
+                # Swap de orders op posities i en j
+                new_schedule_df.iloc[i:j + 1] = new_schedule_df.iloc[i:j + 1][::-1]
 
-                # Maak een tijdelijke kopie van het schema
-                neighbor_schedule = curr_schedule.copy()
-                
-                # Voer de move uit
-                neighbor_schedule.iloc[i:j] = reversed(neighbor_schedule.iloc[i:j])
-                
-                # Bereken de totale kosten van de nieuwe planning
-                new_cost = total_schedule_cost(neighbor_schedule)
-                
-                # Bereken de gain
-                gain = total_costs - new_cost  # Positieve gain betekent kostenbesparing
-                
-                # Controleer of deze move beter is
-                if gain > max_gain:
-                    max_gain = gain
-                    move = (i, j)
-                    fi_move_found = True
+                # Bereken de totale kosten van het nieuwe schema
+                new_cost = total_schedule_cost(new_schedule_df)
+                current_cost = total_schedule_cost(schedule_df)
+
+                # Vergelijk kosten en update als er een verbetering is
+                if new_cost < current_cost:
+                    schedule_df = new_schedule_df
+                    improved = True
         
-        # stap 1: als geen move is gevonden die improving en feasible is: stop
-        if not fi_move_found: 
-            break
-        
-        # stap 2: kies verbetering move
-        i, j = move
-        
-        # stap 3: update de tour
-        curr_schedule.iloc[i:j] = reversed(curr_schedule.iloc[i:j])  # Pas de move toe
-        total_costs = total_schedule_cost(curr_schedule)  # Update de totale kosten
-        
-    return curr_schedule
+        # Voeg de kosten van deze iteratie toe aan de history
+        costs_history.append(total_schedule_cost(schedule_df))
+
+    return schedule_df, costs_history  # Return ook de kosten geschiedenis
 
 def plot_gantt_chart(schedule_df):
     """Visualize the scheduling process using a Gantt chart, showing both setup (grey) and processing times (colored).
@@ -214,12 +163,23 @@ def plot_gantt_chart(schedule_df):
     plt.show()
 
 start_time = time.time()  # Start tijd opnemen
-improved_schedule = discrete_improving_search(schedule_best_costs, iterations=100)
+improved_schedule_2opt, costs_history = two_opt(schedule_deadline)  # Hier neem je je initiële planning mee
 end_time = time.time()  # Eindtijd opnemen
 
-print(f"Initial cost: {total_schedule_cost(schedule_best_costs):.2f}")
-print(f"Improved cost: {total_schedule_cost(improved_schedule):.2f}")
+# Resultaten tonen
+print(f"Initial cost: {total_schedule_cost(schedule_deadline):.2f}")
+print(f"Improved cost: {total_schedule_cost(improved_schedule_2opt):.2f}")
 print(f"Time taken: {end_time - start_time:.2f} seconds")  # Tijd berekenen en printen
 
-plot_gantt_chart(schedule_best_costs)
-plot_gantt_chart(improved_schedule)
+# Plot de Gantt diagrammen
+plot_gantt_chart(schedule_deadline)
+plot_gantt_chart(improved_schedule_2opt)
+
+# Plot de kosten tegenover de iteraties
+plt.figure(figsize=(10, 5))
+plt.plot(costs_history, marker='o')
+plt.title("Kosten tegenover Iteraties tijdens 2-opt Optimalisatie")
+plt.xlabel("Iteratie")
+plt.ylabel("Totale Kosten")
+plt.grid()
+plt.show()
