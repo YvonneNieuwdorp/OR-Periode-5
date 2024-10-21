@@ -24,8 +24,8 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', hand
 
 # Parameters voor simulated annealing
 initial_temperature = 100000
-cooling_rate = 0.98
-iterations_per_temperature = 1000
+cooling_rate = 0.998
+iterations_per_temperature = 10000
 
 # Verkrijg lijst van machines
 machine_list = Machines['Machine'].tolist()
