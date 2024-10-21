@@ -23,9 +23,9 @@ logger = logging.getLogger(name='sa-logger')
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', handlers=[logging.FileHandler("sa.log")])
 
 # Parameters voor simulated annealing
-initial_temperature = 1000
-cooling_rate = 0.9
-iterations_per_temperature = 100
+initial_temperature = 100000
+cooling_rate = 0.98
+iterations_per_temperature = 1000
 
 # Verkrijg lijst van machines
 machine_list = Machines['Machine'].tolist()
@@ -181,7 +181,7 @@ print(f"Improved cost: {total_schedule_cost(improved_schedule):.2f}")
 print(f"Time taken: {end_time - start_time:.2f} seconds")
 
 # Export the best schedule to an Excel file
-output_file = "Best_Schedule.xlsx"
+output_file = "R_Annealing_10.000_Deadline.xlsx"
 improved_schedule.to_excel(output_file, index=False)
 print(f"Best schedule exported to '{output_file}'")
 
