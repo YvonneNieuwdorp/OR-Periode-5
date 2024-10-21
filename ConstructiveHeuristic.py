@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 import scipy.stats as sp
 import matplotlib.pyplot as plt
+import time
+
+start_time = time.time()  # Start tijd opnemen
 
 # Laad de gegevens
 Orders = pd.read_excel('PaintShop - November 2024.xlsx', sheet_name='Orders')
@@ -174,5 +177,10 @@ results_df_dl = pd.DataFrame(results_df_dl)
 df_ch = 'Schedule Constructive Heuristic Best Costs.xlsx'
 df_dl = 'Schedule Constructive Heuristic Deadline.xlsx'
 
-results_df_ch.to_excel(df_ch, index=False)
-results_df_dl.to_excel(df_dl, index=False)
+
+end_time = time.time()  # Eindtijd opnemen
+
+total_time = start_time - end_time
+
+#results_df_ch.to_excel(df_ch, index=False)
+#results_df_dl.to_excel(df_dl, index=False)
