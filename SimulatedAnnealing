@@ -32,7 +32,7 @@ machine_list = Machines['Machine'].tolist()
 
 # Functie om verwerkingstijd te berekenen
 def processing_time(ordernumber, machine_idx):
-    machine_name = machine_names[machine_idx].strip()  # Verwijder eventuele spaties
+    machine_name = machine_names[machine_idx].strip()  
     machine_row = Machines.loc[Machines['Machine'].str.strip() == machine_name]
 
     if machine_row.empty:
